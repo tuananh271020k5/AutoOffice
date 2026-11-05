@@ -8,7 +8,7 @@
 
 Bạn **không cần cài đặt Node.js, không cần tải mã nguồn và không cần gõ lệnh**. Chỉ cần tải file cài đặt `.exe` (20 KB) dưới đây:
 
-👉 **[⬇️ TẢI NGAY: AutoOffice-Setup.exe (GitHub Release v1.0.0)](https://github.com/anhkkk5/AutoOffice/releases/latest/download/AutoOffice-Setup.exe)**  
+👉 **[⬇️ TẢI NGAY: AutoOffice-Setup.exe (GitHub Release v1.1.0)](https://github.com/anhkkk5/AutoOffice/releases/latest/download/AutoOffice-Setup.exe)**  
 *(Link dự phòng trực tiếp: [Tải AutoOffice-Setup.exe](https://github.com/anhkkk5/AutoOffice/raw/master/releases/AutoOffice-Setup.exe))*
 
 ---

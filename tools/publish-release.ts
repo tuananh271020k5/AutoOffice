@@ -20,7 +20,7 @@ async function main() {
   const token = getGitHubToken();
   const owner = 'anhkkk5';
   const repo = 'AutoOffice';
-  const tag = 'v1.0.0';
+  const tag = 'v1.1.0';
   const exePath = resolve('installer/output/AutoOffice-Setup.exe');
   const exeBytes = readFileSync(exePath);
 
@@ -31,7 +31,7 @@ async function main() {
     'X-GitHub-Api-Version': '2022-11-28',
   };
 
-  // Check if release v1.0.0 already exists
+  // Check if release v1.1.0 already exists
   let release: any = null;
   const checkRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`, {
     headers,
@@ -45,14 +45,17 @@ async function main() {
       body: JSON.stringify({
         tag_name: tag,
         target_commitish: 'master',
-        name: 'AutoOffice v1.0.0 — Bộ cài đặt cho Microsoft Word, Excel & PowerPoint',
+        name: 'AutoOffice v1.1.0 — Giao diện tiếng Việt thân thiện (ẩn thuật ngữ code) & 10 Công cụ MCP',
         body: [
-          '## 📥 Tải về bộ cài đặt AutoOffice v1.0.0',
+          '## 📥 Tải về bộ cài đặt AutoOffice v1.1.0 (Bản mới nhất)',
           '',
-          'Tải trực tiếp file **`AutoOffice-Setup.exe`** ở mục **Assets** bên dưới và chạy để tự động tích hợp **AutoOffice** vào Microsoft Word, Excel và PowerPoint.',
+          '### ✨ Điểm mới trong v1.1.0:',
+          '- Ẩn toàn bộ khối mã kỹ thuật/JSON và thuật ngữ lập trình trong khung chat, chỉ hiển thị trạng thái tiếng Việt ngắn gọn và kết quả trả lời tự nhiên.',
+          '- Việt hóa toàn bộ danh mục 10 nhóm tính năng và câu lệnh mẫu.',
+          '- Giao diện Responsive tự động co giãn mượt mà khi thu hẹp khung chat bên phải Word.',
           '',
-          '### Hướng dẫn cài đặt nhanh (30 giây):',
-          '1. Tải và mở **`AutoOffice-Setup.exe`** -> Bấm **"Cài đặt AutoOffice"**.',
+          '### 🛠️ Hướng dẫn cài đặt nhanh (30 giây):',
+          '1. Tải và mở **`AutoOffice-Setup.exe`** ở mục **Assets** bên dưới -> Bấm **"Cài đặt AutoOffice"**.',
           '2. Mở **Microsoft Word** -> Vào **Home -> Add-ins -> More Add-ins -> Shared Folder (Thư mục dùng chung)** -> Chọn **AutoOffice** -> Bấm **Add**.',
           '3. Nhập **API Key cá nhân** của bạn vào khung chat AutoOffice để bắt đầu sử dụng!',
         ].join('\n'),
