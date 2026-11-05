@@ -1,288 +1,106 @@
-<p align="center">
-  <img src="public/assets/icon-256.png" alt="AutoOffice logo" width="128" height="128" />
-</p>
+# 🚀 AutoOffice — Trợ lý AI thông minh cho Microsoft Word, Excel & PowerPoint
 
-<h1 align="center">AutoOffice</h1>
+**AutoOffice** là tiện ích (Add-in) tích hợp trực tiếp vào thanh công cụ của **Microsoft Word, Excel và PowerPoint**, trang bị **Bộ 10 Công cụ MCP chuyên sâu (52 tác vụ)** giúp soạn thảo văn bản hành chính Việt Nam chuẩn Nghị định 30/2020/NĐ-CP, nhận diện trực tiếp vùng văn bản đang bôi chọn/in đậm/tô màu, và chạy đa luồng độc lập trên từng cửa sổ tài liệu.
 
-<p align="center">AI-powered Microsoft Word + Excel + PowerPoint add-in that writes and executes real <code>office.js</code> code on demand.</p>
+---
 
-## What It Does
+## 📥 Tải về bộ cài đặt nhanh (Dành cho người dùng Word)
 
-AutoOffice is a task-pane add-in you chat with. Describe what you want — for Word ("make all headings blue", "insert a 3-column table"), Excel ("put 1 through 10 in column A", "build a column chart from B2:D8"), or PowerPoint ("add a slide titled 'Q3 plan' with three bullets", "make every slide title bold") — and the agent:
+Bạn **không cần cài đặt Node.js, không cần tải mã nguồn và không cần gõ lệnh**. Chỉ cần tải file cài đặt `.exe` (20 KB) dưới đây:
 
-1. Looks up the relevant `office.js` API docs as needed
-2. Generates working code
-3. Shows you the code for approval before running it
-4. Executes it in a sandboxed iframe against your live Word document
-5. Self-heals on errors — feeds the error back to the LLM and retries up to 3 times
+👉 **[⬇️ TẢI NGAY: AutoOffice-Setup.exe (GitHub Release v1.0.0)](https://github.com/anhkkk5/AutoOffice/releases/latest/download/AutoOffice-Setup.exe)**  
+*(Link dự phòng trực tiếp: [Tải AutoOffice-Setup.exe](https://github.com/anhkkk5/AutoOffice/raw/master/releases/AutoOffice-Setup.exe))*
 
-## Why AutoOffice
+---
 
-Two things make AutoOffice different from every other AI option for Word and Excel:
+## 🛠️ Hướng dẫn cài đặt vào Microsoft Word (Chỉ mất 30 giây)
 
-**1. Private by design — open source, runs locally, works with local models.**
-The whole add-in is MIT-licensed and runs in your browser as a normal Office task pane. Your API key is stored on your machine, and traffic goes only to the provider you pick — Anthropic, OpenAI, Azure, or any OpenAI-compatible endpoint. Point it at Ollama or LM Studio and your document never leaves the machine. No Microsoft account requirement, no Copilot license, no third-party server in the middle. Audit the code, fork it, self-host the build — nothing is hidden.
+### Bước 1: Chạy bộ cài `AutoOffice-Setup.exe`
+1. Nhấp đúp vào file **`AutoOffice-Setup.exe`** vừa tải về.
+2. Nếu Windows hỏi quyền quản trị (UAC), bấm **Yes** (hoặc *More info -> Run anyway* nếu SmartScreen hỏi).
+3. Trong cửa sổ hiện ra, bấm nút màu xanh **"Cài đặt AutoOffice"** -> Đợi thông báo **Cài đặt hoàn tất!**.
 
-**2. Pure `office.js` + MCP — minimal in code, maximal in capability.**
-There is no curated wrapper API. The agent has exactly two built-in tools: look up the relevant `office.js` API docs, and run real code against the live document. That means anything Word or Excel can natively do is reachable on day one — formatting, tables, charts, ranges, comments, content controls, all of it — without us having to "support" each operation one at a time. Plug in MCP servers (Linear, Notion, internal APIs) and the same tiny surface area extends to anything outside Office too. Tiny core, unbounded reach.
+*(Bộ cài sẽ tự động đóng các cửa sổ Word đang mở, tạo thư mục chia sẻ cục bộ `C:\AutoOfficeAddin` và đăng ký Trusted Catalog vào Microsoft Office).*
 
-## Comparison: Word + Excel + PowerPoint AI Add-ins
+---
 
-| | **AutoOffice** | **Microsoft Copilot** | **Claude for Word** | **Word GPT Plus** |
-|---|:---:|:---:|:---:|:---:|
-| **— Privacy & openness —** | | | | |
-| Open source | ✅ MIT | ❌ | ❌ | ✅ MIT |
-| Self-hostable | ✅ | ❌ | ❌ | ✅ |
-| Local model support | ✅ Ollama, any OpenAI-compatible endpoint | ❌ | ❌ | ✅ Ollama |
-| BYO API key (key stays local) | ✅ | ❌ | ❌ | ✅ |
-| Cost | Free + your provider usage | M365 Copilot license | Claude paid plan | Free + your provider usage |
-| Provider choice | Anthropic, OpenAI, any OpenAI-compatible, Ollama | Microsoft-hosted only | Claude only | OpenAI, Azure, Gemini, Ollama |
-| **— Power (small core, big reach) —** | | | | |
-| Executes real `office.js` | ✅ | ❌ | ❌ | ⚠️ partial |
-| Code preview before run | ✅ | ❌ | ❌ | ❌ |
-| MCP support | ✅ HTTP / SSE | ✅ via Copilot Studio | ❌ | ❌ |
-| Reaches full Word + Excel API surface | ✅ via real code | ⚠️ curated actions | ⚠️ curated actions | ⚠️ curated actions |
-| **— AutoOffice trade-offs —** | | | | |
-| Native tracked-changes UX | ❌ | ❌ | ✅ | ❌ |
-| Cross-app context (Outlook, Teams, PPT…) | ❌ Word + Excel + PowerPoint, single-doc | ✅ all M365 | ✅ Word + Excel + PPT | ❌ |
+### Bước 2: Kích hoạt AutoOffice lần đầu trong Word
+1. Mở **Microsoft Word** (mở một tài liệu bất kỳ).
+2. Trên thanh công cụ **Home**, bấm vào nút **Add-ins** -> Chọn **More Add-ins** *(hoặc vào thẻ **Insert -> Get Add-ins / My Add-ins**)*.
+3. Trong hộp thoại **Office Add-ins**:
+   - Chọn tab **SHARED FOLDER (Thư mục dùng chung)** ở phía trên.
+   - Bấm chọn **AutoOffice** -> Nhấn **Add (Thêm)**.
+4. Biểu tượng **AutoOffice** sẽ xuất hiện cố định ở góc bên phải của thẻ **Home**. Từ những lần mở Word tiếp theo, nút **AutoOffice** luôn nằm sẵn trên thanh công cụ!
 
-## Install
+---
 
-Prebuilt Windows installer — no Node, no source build, no dev cert.
+### Bước 3: Nhập Khóa API Cá Nhân (Chỉ nhập 1 lần trên máy của bạn)
+1. Bấm vào nút **AutoOffice** trên thanh **Home** để mở khung chat bên phải.
+2. Ngay tại màn hình chào mừng (hoặc trong phần **⚙️ Cài đặt**), chọn nhà cung cấp AI:
+   - **OpenAI** (`gpt-4o`, `gpt-5.4`, ...)
+   - **Google Gemini** (`gemini-2.5-pro`, `gemini-2.5-flash`, ...)
+   - **Anthropic Claude** (`claude-sonnet-4-6`, ...)
+   - **DeepSeek** (`deepseek-chat`, ...)
+   - Hoặc mô hình miễn phí chạy cục bộ qua **Ollama / LM Studio**.
+3. Dán **API Key cá nhân** của bạn vào ô và bấm **Lưu Khóa API Cá Nhân**.
 
-1. Download **AutoOffice-Setup.exe** from the [latest release](https://github.com/Sivan22/autoOffice/releases/latest) and run it.
-2. If Windows shows **"Windows protected your PC"**, click **More info → Run anyway** (the installer is unsigned).
-3. Restart Word (or Excel / PowerPoint).
-4. In Word: **Home → Add-ins → Advanced → Shared Folder**, pick **AutoOffice**, and click **Add**.
+> 🔒 **Bảo mật & Riêng tư tuyệt đối**: Khóa API và lịch sử trò chuyện của bạn chỉ được lưu cục bộ trên máy tính cá nhân của bạn (`localStorage`), hoàn toàn không chia sẻ hay đồng bộ sang máy của người dùng khác.
 
-The installer just registers an Office add-in manifest. The task-pane assets themselves are served from **my** GitHub Pages site at `https://sivan22.github.io/autoOffice/`, which means you're loading code I deploy. If you'd rather not depend on that, host it yourself — see below.
+---
 
-### Self-host on your own GitHub Pages
+## ✨ Điểm nổi bật của AutoOffice
 
-1. **Fork** `Sivan22/autoOffice` on GitHub.
-2. In your fork: **Settings → Pages → Source: GitHub Actions**.
-3. If your fork's repo name isn't `autoOffice`, edit `.github/workflows/deploy.yml` and change `VITE_BASE: /autoOffice/` to `/<your-repo-name>/`.
-4. Push to `master` (or run **Deploy to GitHub Pages** manually). Your add-in will be served at `https://<your-username>.github.io/<your-repo-name>/`.
-5. Edit `manifest.production.xml`: replace every `https://sivan22.github.io/autoOffice/` with your fork's Pages URL, and change the `<Id>` GUID to a fresh one so it doesn't collide with the upstream add-in.
-6. Either rebuild the installer (`installer/setup.iss` via Inno Setup) so it ships your edited manifest, or sideload `manifest.production.xml` directly via **Insert → Add-ins → Upload My Add-in**.
+1. **Bộ 10 Công cụ MCP chuyên sâu cho Word (52 Actions/Ops)**:
+   - `word_read`: Đọc cấu trúc tài liệu, đoạn văn `[P0]..[Pn]`, nhận diện vùng đang bôi chọn/in đậm/tô màu, đếm từ và dàn ý.
+   - `word_edit`: Soạn văn bản, sửa trực tiếp phần đang bôi chọn (`edit_selection`), sửa theo định dạng in đậm/tô màu (`edit_by_format`), tìm kiếm & thay thế thông minh không phân biệt hoa/thường và khoảng cách (`search_and_replace`), hỗ trợ cả văn bản trong khung **Text Box** trang bìa.
+   - `word_format`: Chuẩn hóa văn bản hành chính Việt Nam (`format_administrative_vn` — Times New Roman 13pt, giãn dòng 1.3, căn đều 2 bên), định dạng font, đoạn văn, kiểu chữ và tô sáng.
+   - `word_structure`: Tạo và định dạng bảng biểu (`insert_table`), ngắt trang (`insert_break`), thiết lập khổ giấy A4 & lề chuẩn (`set_page_setup`), Header/Footer.
+   - `word_media`: Chèn hình ảnh Base64, liên kết (Hyperlink) và đánh dấu (Bookmark).
+   - `word_review`: Thêm/xóa nhận xét (Comments) và bật/tắt theo dõi sửa đổi (Track Changes).
+   - `word_references`: Tạo mục lục tự động (TOC), chú thích chân trang (Footnote/Endnote) và trường dữ liệu (Fields).
+   - `word_document`: Quản lý Content Controls, thuộc tính tài liệu và xuất/nhập OOXML.
+   - `word_app`: Kiểm tra môi trường Office.js.
+   - `word_help`: Tra cứu danh mục công cụ và hướng dẫn nhanh.
+2. **Tự động chuẩn hóa Quốc hiệu & Tiêu ngữ**:
+   - Khi yêu cầu tạo đơn từ, biên bản, báo cáo, bản kiểm điểm..., AutoOffice tự động đảm bảo có đầy đủ **CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM** và **Độc lập - Tự do - Hạnh phúc** căn giữa chuẩn thể thức mà không làm rò rỉ gạch chân xuống các dòng dưới.
+3. **Đa luồng độc lập cho từng cửa sổ Word**:
+   - Mở nhiều file Word cùng lúc sẽ tạo các phiên trò chuyện độc lập (`📄 Tên_file.docx`), không bị xung đột dữ liệu giữa các cửa sổ và lưu trữ đầy đủ vào **Lịch sử**.
 
-## Development
+---
 
-### Prerequisites
+## 💻 Dành cho Lập trình viên (Tự chạy từ mã nguồn)
 
-- Node.js 18+
-- Microsoft 365 (Word, Excel, or PowerPoint — Web or Desktop)
-- An API key for Anthropic, OpenAI, or any OpenAI-compatible provider
+Nếu bạn muốn tự chạy máy chủ phát triển cục bộ hoặc tự đóng gói lại bộ cài `.exe`:
 
-### Install
+### Yêu cầu:
+- **Node.js >= 22** (Khuyên dùng bản LTS tại [nodejs.org](https://nodejs.org/))
+- **Microsoft Office** (Word / Excel / PowerPoint trên Windows)
 
-```bash
+### Các lệnh chính:
+```powershell
+# 1. Cài đặt thư viện
 npm install
-```
 
-### Dev certs (required for Office sideloading)
-
-```bash
+# 2. Cài chứng chỉ HTTPS cục bộ (chỉ cần chạy 1 lần đầu, chọn Yes khi được hỏi)
 npm run certs
-```
 
-This installs a self-signed localhost certificate so Word will trust the add-in URL.
+# 3. Chạy server dev và tự động mở Word kèm Add-in
+npm start
 
-### Run + sideload (with debugger)
-
-```bash
-npm run start
-```
-
-Starts the dev server and sideloads the add-in into Word with the debugger attached. The server runs at **https://localhost:3721**.
-
-### Run + sideload (no debugger — recommended for regular dev)
-
-```bash
-npm run sideload
-```
-
-Same as `start` but without attaching the debugger. Faster startup, targets desktop Word directly. Use this for day-to-day testing when you don't need breakpoints.
-
-### Run + sideload Excel
-
-Same scripts but targeting Excel:
-
-```bash
-npm run start:excel       # debugger
-npm run sideload:excel    # no debugger
-```
-
-### Run + sideload PowerPoint
-
-Same scripts but targeting PowerPoint:
-
-```bash
-npm run start:powerpoint       # debugger
-npm run sideload:powerpoint    # no debugger
-```
-
-### Run dev server only
-
-```bash
+# 4. Hoặc chỉ bật server giao diện tại https://localhost:3721
 npm run dev
-```
 
-Starts only the Vite dev server — no sideloading. Useful if you're working on the UI and sideloading separately.
-
-### Sideload manually
-
-If the dev server is already running:
-
-**Insert → Add-ins → Upload My Add-in** → pick `manifest.xml`.
-
-### Stop
-
-```bash
-npm run stop
-```
-
-### Configure
-
-Open the add-in task pane and click the settings gear:
-
-- **Provider:** Anthropic, OpenAI, or any OpenAI-compatible endpoint (Ollama, LM Studio, etc.)
-- **API Key:** stored locally, never sent anywhere except directly to the provider
-- **Model:** e.g. `claude-opus-4-7`, `gpt-4o`
-- **Auto-approve:** skip the approve step and run code immediately
-- **MCP Servers:** add HTTP/SSE MCP servers to extend the agent with external tools
-
-## Project Structure
-
-```
-src/taskpane/
-├── index.tsx              — Entry point, Office.onReady
-├── App.tsx                — Root component, state management
-├── agent/
-│   ├── orchestrator.ts    — Agent loop: streamText + tool routing + self-healing
-│   ├── tools.ts           — Built-in tool definitions
-│   └── providers.ts       — Provider factory (Anthropic, OpenAI, compatible)
-├── components/
-│   ├── ChatPanel.tsx      — Message list + input
-│   ├── CodeBlock.tsx      — Syntax-highlighted code with approve/reject
-│   ├── MessageBubble.tsx  — Individual message
-│   ├── ToolActivity.tsx   — Inline tool call indicators
-│   └── SettingsPanel.tsx  — Provider, API keys, MCP, auto-approve
-├── executor/
-│   ├── sandbox.ts         — Iframe lifecycle + postMessage bridge
-│   └── iframe.html        — Sandbox page (loads office.js, receives execute messages)
-├── skills/                — office.js API doc chunks (markdown, one per domain)
-│   ├── index.ts           — Registry + lookup function
-│   ├── formatting.md
-│   ├── tables.md
-│   ├── context-sync.md    — Critical: load()/sync() batching model
-│   └── ...
-├── mcp/
-│   └── client.ts          — MCP client via @ai-sdk/mcp
-└── store/
-    └── settings.ts        — Persist settings (roamingSettings in Office, localStorage in dev)
-```
-
-## Built-in Agent Tools
-
-| Tool | What it does |
-|------|-------------|
-| `lookup_skill(name)` | Fetches `office.js` API docs for a domain (formatting, tables, ranges, etc.) |
-| `execute_code(code)` | Submits generated code to the sandboxed iframe for execution |
-
-To read document state the agent writes `execute_code` that loads and returns the needed properties directly — no separate tool required.
-
-MCP server tools are surfaced alongside these automatically.
-
-## Self-Healing
-
-When code execution fails, the error is fed back to the LLM with the instruction to fix it. Each retry appears as a visible message in chat. After 3 failures the agent gives up and shows the final error.
-
-## Settings
-
-| Setting | Default |
-|---------|---------|
-| AI Provider | (none — select in settings) |
-| Model | (provider-dependent) |
-| Auto-approve | Off |
-| Max retries | 3 |
-| Execution timeout | 30 seconds |
-| MCP Servers | Empty |
-
-Settings are persisted via `Office.context.roamingSettings` when running inside Office, and `localStorage` during development. Provider, API key, MCP server, and other settings are shared across Word, Excel, and PowerPoint by design — there is one logical add-in per install.
-
-## Build
-
-```bash
+# 5. Đóng gói bản dựng giao diện tĩnh (dist/)
 npm run build
+
+# 6. Đóng gói lại file cài đặt installer/output/AutoOffice-Setup.exe
+npm run build:exe
 ```
 
-Output goes to `dist/`. Deploy the `dist/` folder to any HTTPS host and update the URLs in `manifest.xml`.
+---
 
-## Notes
-
-- **Browser-only MCP:** The add-in runs entirely client-side. Only HTTP/SSE MCP transports work — no stdio. Local MCP servers need to expose an HTTP endpoint.
-- **CORS:** Direct browser-to-API calls work with Anthropic and OpenAI. If you hit CORS issues with a provider, you'll need a lightweight proxy.
-- **iframe context:** The sandbox iframe loads its own `office.js` instance. This follows the same pattern as Microsoft's Script Lab.
-
-## Roadmap
-
-### Chat History
-Conversations are persisted to `localStorage` per-device and restored on reload. You can keep multiple named conversations and switch between them from the history panel; titles are auto-generated by the configured model after the first turn.
-
-Planned work:
-- **Export** — copy conversation (including generated code and results) as markdown or plain text
-
-## Adding a Language
-
-AutoOffice's UI and AI agent both run in the user's language.
-
-To add a new language (example: French):
-
-1. **Register the locale** in `src/taskpane/i18n/registry.ts`:
-
-   ```ts
-   export const LOCALES = {
-     en: { name: 'English', nativeName: 'English',  direction: 'ltr', fallback: null },
-     he: { name: 'Hebrew',  nativeName: 'עברית',    direction: 'rtl', fallback: 'en' },
-     fr: { name: 'French',  nativeName: 'Français', direction: 'ltr', fallback: 'en' },
-   } as const satisfies Record<string, LocaleMeta>;
-   ```
-
-2. **Translate the strings.** Copy `src/taskpane/i18n/locales/en.json` to `src/taskpane/i18n/locales/fr.json` and translate the values. Keep the keys identical and the `{{name}}` placeholders intact.
-
-3. **Verify coverage:**
-
-   ```bash
-   npm run check:i18n
-   ```
-
-   You should see `✓ fr: N keys, complete`. Missing keys fail the build; extra keys are warnings.
-
-That's it — the locale appears in the Settings → Language dropdown automatically, and the AI agent will reply in the new language for users who pick it.
-
-## Tech Stack
-
-- **Framework:** React 19 + TypeScript
-- **Build:** Vite with HTTPS (required for Office sideloading)
-- **UI:** Fluent UI (`@fluentui/react-components`)
-- **AI:** Vercel AI SDK (`ai`, `@ai-sdk/anthropic`, `@ai-sdk/openai`)
-- **MCP:** `@ai-sdk/mcp` for external tool servers
-- **Code highlighting:** Shiki
-- **Schemas:** Zod
-
-## Architecture
-
+## 🗑️ Gỡ cài đặt
+Nếu muốn gỡ bỏ Add-in khỏi Word, bạn có thể mở lại file `AutoOffice-Setup.exe` và bấm nút **"Gỡ cài đặt"**, hoặc chạy lệnh:
+```powershell
+AutoOffice-Setup.exe /UNINSTALL /S
 ```
-Task Pane (React)
-├── Chat UI (Fluent UI)          ← user input, message history, tool activity
-├── Code Preview Block           ← syntax-highlighted code with Approve / Reject
-└── Agent Orchestrator
-    ├── streamText (AI SDK)      ← multi-provider LLM client
-    ├── Skill Registry           ← office.js API docs fetched on demand
-    ├── MCP Client               ← external tool servers (HTTP only)
-    └── postMessage bridge
-            └── Sandboxed iframe ← executes generated code against live document
-```
-
-The same task pane runs in Word, Excel, and PowerPoint; `HostContext` is resolved at startup and gates the skill registry, sandbox wrapping, and system prompt per host.
