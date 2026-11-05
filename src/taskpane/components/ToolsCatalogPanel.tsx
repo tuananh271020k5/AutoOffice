@@ -283,7 +283,7 @@ export function ToolsCatalogPanel({
               </span>
             </div>
 
-            {KITCHENSINK_WORD_TOOLS_META.map((item) => {
+            {KITCHENSINK_WORD_TOOLS_META.map((item, idx) => {
               const title = isVi ? item.titleVi : item.titleEn;
               const desc = isVi ? item.descVi : item.descEn;
               const sample = isVi ? item.samplePromptVi : item.samplePromptEn;
@@ -291,7 +291,7 @@ export function ToolsCatalogPanel({
                 <div key={item.name} className={styles.card}>
                   <div className={styles.cardTopBar}>
                     <span className={styles.toolCodePill}>
-                      🛠️ {item.name} ({item.ops.length} ops)
+                      🛠️ {isVi ? `Nhóm ${idx + 1} (${item.ops.length} tác vụ)` : `Group ${idx + 1} (${item.ops.length} actions)`}
                     </span>
                     <div className={styles.actionRow}>
                       {onFillSample && (
@@ -324,16 +324,6 @@ export function ToolsCatalogPanel({
                     {title}
                   </Text>
                   <Text size={200}>{desc}</Text>
-                  <div className={styles.opsRow}>
-                    <Text size={100} weight="semibold" style={{ marginRight: "4px" }}>
-                      Actions ({item.ops.length}):
-                    </Text>
-                    {item.ops.map((op) => (
-                      <span key={op} className={styles.opBadge}>
-                        {op}
-                      </span>
-                    ))}
-                  </div>
                   <div className={styles.samplePreview}>
                     💬 {isVi ? "Mẫu thử:" : "Sample:"} &ldquo;{sample}&rdquo;
                   </div>

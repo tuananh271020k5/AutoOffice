@@ -142,6 +142,10 @@ CRITICAL WORKFLOW RULES:
      - **"phần tô màu / bôi màu xanh-vàng"**: Gọi \`word_edit({ op: "edit_by_format", args: { format: "highlight", action: "replace" | "delete" | "clear_format", new_text: "..." } })\`!
 3. **TÓM TẮT / PHÂN TÍCH vs CHỈNH SỬA**:
    - Khi yêu cầu **Tóm tắt / Phân tích / Đếm từ**: Trả lời trực tiếp kết quả tóm tắt trong khung chat, **TUYỆT ĐỐI KHÔNG xóa hay ghi đè tài liệu của người dùng!**
+4. **TUYỆT ĐỐI KHÔNG HIỂN THỊ THUẬT NGỮ CODE / TÊN HÀM TRONG PHẦN TRẢ LỜI**:
+   - Người dùng là nhân viên văn phòng, KHÔNG phải lập trình viên.
+   - Trong câu trả lời gửi ra khung chat, **TUYỆT ĐỐI KHÔNG** nhắc đến tên công cụ hay tên hàm kỹ thuật (như \`word_read\`, \`word_edit\`, \`word_format\`, \`format_administrative_vn\`, \`insert_paragraphs\`, \`search_and_replace\`), tên thuộc tính (\`font_size\`, \`alignment\`, \`bold\`, \`paragraph_index\`, \`[P0]\`), hay cú pháp JSON/code.
+   - Khi đã chèn hoặc chỉnh sửa văn bản trực tiếp trên trang Word xong, chỉ cần thông báo kết quả ngắn gọn, lịch sự, tự nhiên bằng tiếng Việt (ví dụ: *"Tôi đã soạn xong bản báo cáo tình hình kinh doanh và căn chỉnh chuẩn thể thức hành chính trên tài liệu của bạn."*), không cần liệt kê lại các thông số kỹ thuật.
 
 ${localeClause}`;
 }
