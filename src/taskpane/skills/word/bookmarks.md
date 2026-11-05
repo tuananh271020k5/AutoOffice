@@ -1,84 +1,55 @@
 # Bookmarks — Named Ranges & Navigation
 
-## Key Types
-- `Word.Bookmark` — name, range, hidden
-- `Word.BookmarkCollection` — items array
-- `Word.Range.insertBookmark(name)` — mark a range
-- `Word.Document.getBookmarkRange(name)` — retrieve a bookmark's range
+## Key Rules
+- Bookmark names must ONLY contain letters, numbers, and underscores (`_`), must start with a letter, and cannot contain spaces (e.g., `"MocQuanTrong_1"`).
+- **CRITICAL**:
+  - `insertBookmark(name)` is on **`Word.Range`** (e.g. `range.insertBookmark("MocQuanTrong_1")`).
+  - `getBookmarks()` is on **`Word.Range`** (`context.document.body.getRange().getBookmarks(false, false)`), NOT on `Word.Body`!
+  - `getBookmarks()` returns `OfficeExtension.ClientResult<string[]>` — do **NOT** call `.load("items")` on it! Just `await context.sync()` and read `bookmarks.value`.
 
-## Insert a Bookmark
-
-```javascript
-await Word.run(async (context) => {
-  const selection = context.document.getSelection();
-  selection.insertBookmark("myBookmark");
-  await context.sync();
-});
-```
-
-## Navigate to (Get Range of) a Bookmark
-
-```javascript
-await Word.run(async (context) => {
-  // Returns the range the bookmark spans
-  const range = context.document.getBookmarkRange("myBookmark");
-  range.load("text");
-  await context.sync();
-
-  console.log("Bookmark text:", range.text);
-});
-```
-
-## Insert Text at a Bookmark
-
-```javascript
-await Word.run(async (context) => {
-  const range = context.document.getBookmarkRange("myBookmark");
-  range.insertText("Replaced content", Word.InsertLocation.replace);
-  await context.sync();
-});
-```
-
-## List All Bookmarks in the Document
+## Insert a Bookmark & List All Bookmarks
 
 ```javascript
 await Word.run(async (context) => {
   const body = context.document.body;
-  // getBookmarks(includeHidden, includeAdjacent)
-  const bookmarks = body.getBookmarks(false, false);
-  bookmarks.load("items");
+  const paragraphs = body.paragraphs;
+  paragraphs.load("items,text");
   await context.sync();
 
-  for (const bm of bookmarks.items) {
-    bm.load("name");
+  // Bookmark the first non-empty paragraph (or create one if empty)
+  let targetRange;
+  const firstNonEmpty = paragraphs.items.find(p => p.text && p.text.trim().length > 0);
+  if (firstNonEmpty) {
+    targetRange = firstNonEmpty.getRange();
+  } else {
+    const p = body.insertParagraph("Đoạn văn được đánh dấu Bookmark", Word.InsertLocation.end);
+    targetRange = p.getRange();
   }
+
+  targetRange.insertBookmark("ViTriQuanTrong");
+  const bookmarksResult = body.getRange().getBookmarks(false, false);
   await context.sync();
 
-  return bookmarks.items.map(bm => bm.name);
+  return {
+    addedBookmark: "ViTriQuanTrong",
+    allBookmarks: bookmarksResult.value,
+  };
 });
 ```
 
-## Check if a Bookmark Exists (OrNullObject)
+## Navigate to or Replace Text at a Bookmark
 
 ```javascript
 await Word.run(async (context) => {
-  const range = context.document.getBookmarkRangeOrNullObject("myBookmark");
-  range.load("isNullObject");
+  const range = context.document.getBookmarkRangeOrNullObject("ViTriQuanTrong");
+  range.load("isNullObject,text");
   await context.sync();
 
   if (range.isNullObject) {
-    console.log("Bookmark does not exist");
-  } else {
-    range.load("text");
-    await context.sync();
-    console.log("Found:", range.text);
+    return "Bookmark not found";
   }
+  range.select();
+  await context.sync();
+  return range.text;
 });
 ```
-
-## Common Pitfalls
-
-- Bookmark names must not contain spaces — use camelCase or underscores
-- `getBookmarkRange` throws if the bookmark doesn't exist — use `getBookmarkRangeOrNullObject` when existence is uncertain
-- Inserting a bookmark on a collapsed (empty) selection creates a zero-length bookmark; give it content first
-- Hidden bookmarks (used internally by Word) are excluded by default in `getBookmarks(false, false)`

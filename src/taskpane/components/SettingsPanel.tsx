@@ -4,7 +4,6 @@ import {
   tokens,
   Button,
   Input,
-  Label,
   Select,
   Switch,
   Text,
@@ -24,6 +23,7 @@ import {
 } from '@fluentui/react-icons';
 import type { AppSettings, McpServerConfig } from '../store/settings.ts';
 import { LOCAL_PROVIDER_IDS } from '../store/settings.ts';
+import { clearAllHistory } from '../store/history.ts';
 import { useTranslation, availableLocales, type LocaleId } from '../i18n/index.ts';
 import { discoverLmStudioModels, type LmStudioModel, type LmStudioStatus } from '../agent/lmstudio.ts';
 
@@ -83,6 +83,7 @@ interface SettingsPanelProps {
   settings: AppSettings;
   onChange: (settings: AppSettings) => void;
   onClose: () => void;
+  onHistoryCleared?: () => void;
 }
 
 const PROVIDER_MODELS: Record<string, string[]> = {
@@ -140,10 +141,11 @@ const PROVIDER_MODELS: Record<string, string[]> = {
 
 const PROVIDERS_WITH_BASE_URL = new Set(['openai-compatible', 'openrouter', 'ollama', 'lmstudio']);
 
-export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProps) {
+export function SettingsPanel({ settings, onChange, onClose, onHistoryCleared }: SettingsPanelProps) {
   const styles = useStyles();
   const { t, locale, setLocale } = useTranslation();
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [clearedNotice, setClearedNotice] = useState<string | null>(null);
 
   const updateProvider = (id: string, field: string, value: string) => {
     const providers = settings.providers.map(p =>
@@ -174,6 +176,18 @@ export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProp
       ...settings,
       mcpServers: settings.mcpServers.filter((_, i) => i !== index),
     });
+  };
+
+  const handleClearPersonalKeys = () => {
+    const clearedProviders = settings.providers.map(p => ({ ...p, apiKey: '' }));
+    onChange({ ...settings, providers: clearedProviders });
+    setClearedNotice(locale === 'vi' ? 'Đã xóa toàn bộ khóa API trên máy này.' : 'Cleared all API keys on this device.');
+  };
+
+  const handleClearLocalHistory = () => {
+    clearAllHistory();
+    onHistoryCleared?.();
+    setClearedNotice(locale === 'vi' ? 'Đã xóa toàn bộ lịch sử trò chuyện trên máy này.' : 'Cleared all chat history on this device.');
   };
 
   const selectedProvider = settings.providers.find(p => p.id === settings.selectedProviderId);
@@ -367,6 +381,33 @@ export function SettingsPanel({ settings, onChange, onClose }: SettingsPanelProp
               <option key={l.id} value={l.id}>{l.nativeName}</option>
             ))}
           </Select>
+        </div>
+
+        <Divider />
+
+        {/* Personal Privacy & Local Device Storage */}
+        <div className={styles.section}>
+          <Text weight="semibold" size={300}>
+            {locale === 'vi' ? 'Bảo mật & Quyền riêng tư (Mỗi người dùng riêng biệt)' : 'Privacy & Local Data'}
+          </Text>
+          <Text size={200}>
+            {locale === 'vi'
+              ? 'Khóa API và lịch sử trò chuyện chỉ được lưu cục bộ trên máy tính cá nhân của bạn (localStorage), tuyệt đối không đính kèm vào file Word và không chia sẻ sang máy người khác.'
+              : 'API keys and chat history are stored strictly on your local device and never shared with other users.'}
+          </Text>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <Button appearance="outline" size="small" onClick={handleClearPersonalKeys}>
+              {locale === 'vi' ? 'Xóa khóa API trên máy này' : 'Clear API Keys on this device'}
+            </Button>
+            <Button appearance="outline" size="small" onClick={handleClearLocalHistory}>
+              {locale === 'vi' ? 'Xóa toàn bộ lịch sử trên máy này' : 'Clear All History on this device'}
+            </Button>
+          </div>
+          {clearedNotice && (
+            <Badge appearance="tint" color="success" size="small">
+              {clearedNotice}
+            </Badge>
+          )}
         </div>
       </div>
     </div>

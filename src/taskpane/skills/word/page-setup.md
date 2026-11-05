@@ -1,94 +1,15 @@
 # Page Setup — Margins, Orientation, Paper Size
 
-## Key Types
-- `Word.PageSetup` — margins (top, bottom, left, right), orientation, pageWidth, pageHeight
-- `Word.Section.pageSetup` — per-section page layout
-- `Word.PageOrientation` — portrait | landscape
-- All measurements are in **points** (1 inch = 72 points)
+## Key Rules & Units
+- All margin and dimension values are in **points**:
+  - `1 inch = 72 points`
+  - `1 cm = 28.35 points` (e.g., `2 cm = 56.7 pt`, `3 cm = 85.05 pt`, `1.5 cm = 42.52 pt`)
+- Common paper sizes in points:
+  - **A4**: width `595.3` pt (210 mm), height `841.9` pt (297 mm)
+  - **US Letter**: width `612` pt, height `792` pt
+- **IMPORTANT COMPATIBILITY RULE**: `section.pageSetup` requires `WordApiDesktop 1.3`. In some Word builds `section.pageSetup` may be `undefined`. Always check `if (section.pageSetup)` and fall back to updating `<w:pgSz>` / `<w:pgMar>` in `body.getOoxml()` when `section.pageSetup` is unavailable!
 
-## Read Page Setup
-
-```javascript
-await Word.run(async (context) => {
-  const section = context.document.sections.getFirst();
-  const ps = section.pageSetup;
-  ps.load("topMargin,bottomMargin,leftMargin,rightMargin,orientation,pageWidth,pageHeight");
-  await context.sync();
-
-  return {
-    topMargin: ps.topMargin,       // points
-    bottomMargin: ps.bottomMargin,
-    leftMargin: ps.leftMargin,
-    rightMargin: ps.rightMargin,
-    orientation: ps.orientation,   // "portrait" or "landscape"
-    pageWidth: ps.pageWidth,
-    pageHeight: ps.pageHeight,
-  };
-});
-```
-
-## Set Page Margins (1 inch = 72 points)
-
-```javascript
-await Word.run(async (context) => {
-  const section = context.document.sections.getFirst();
-  const ps = section.pageSetup;
-
-  ps.topMargin    = 72;   // 1 inch
-  ps.bottomMargin = 72;
-  ps.leftMargin   = 90;   // 1.25 inches
-  ps.rightMargin  = 90;
-
-  await context.sync();
-});
-```
-
-## Set Landscape Orientation
-
-```javascript
-await Word.run(async (context) => {
-  const section = context.document.sections.getFirst();
-  const ps = section.pageSetup;
-
-  ps.orientation = Word.PageOrientation.landscape;
-  // Swap width/height when changing orientation
-  ps.pageWidth  = 792;  // 11 inches
-  ps.pageHeight = 612;  // 8.5 inches
-
-  await context.sync();
-});
-```
-
-## Set Portrait Orientation
-
-```javascript
-await Word.run(async (context) => {
-  const section = context.document.sections.getFirst();
-  const ps = section.pageSetup;
-
-  ps.orientation = Word.PageOrientation.portrait;
-  ps.pageWidth  = 612;  // 8.5 inches
-  ps.pageHeight = 792;  // 11 inches
-
-  await context.sync();
-});
-```
-
-## Set A4 Paper Size
-
-```javascript
-await Word.run(async (context) => {
-  const section = context.document.sections.getFirst();
-  const ps = section.pageSetup;
-
-  ps.pageWidth  = 595;  // 210 mm ≈ 595 pt
-  ps.pageHeight = 842;  // 297 mm ≈ 842 pt
-
-  await context.sync();
-});
-```
-
-## Apply Different Page Setup per Section
+## Set A4 Paper Size & Standard Margins (with Universal Fallback)
 
 ```javascript
 await Word.run(async (context) => {
@@ -96,31 +17,91 @@ await Word.run(async (context) => {
   sections.load("items");
   await context.sync();
 
-  // Make the second section landscape
-  if (sections.items.length > 1) {
-    const ps = sections.items[1].pageSetup;
-    ps.orientation = Word.PageOrientation.landscape;
-    ps.pageWidth  = 792;
-    ps.pageHeight = 612;
+  const topPt = 56.7;    // 2 cm
+  const bottomPt = 56.7; // 2 cm
+  const leftPt = 85.05;  // 3 cm
+  const rightPt = 42.52; // 1.5 cm
+  const widthPt = 595.3; // A4 width (210mm)
+  const heightPt = 841.9;// A4 height (297mm)
+
+  const firstSection = sections.items[0];
+  if (firstSection && firstSection.pageSetup) {
+    for (const sec of sections.items) {
+      const ps = sec.pageSetup;
+      ps.orientation = Word.PageOrientation.portrait;
+      ps.pageWidth = widthPt;
+      ps.pageHeight = heightPt;
+      ps.topMargin = topPt;
+      ps.bottomMargin = bottomPt;
+      ps.leftMargin = leftPt;
+      ps.rightMargin = rightPt;
+    }
+    await context.sync();
+    return "Updated page setup via Section.pageSetup";
   }
 
+  // Fallback for Word versions where section.pageSetup is undefined (uses OOXML twips: 1 pt = 20 twips)
+  const body = context.document.body;
+  const ooxmlResult = body.getOoxml();
   await context.sync();
+
+  const wTwips = Math.round(widthPt * 20);
+  const hTwips = Math.round(heightPt * 20);
+  const topTwips = Math.round(topPt * 20);
+  const bottomTwips = Math.round(bottomPt * 20);
+  const leftTwips = Math.round(leftPt * 20);
+  const rightTwips = Math.round(rightPt * 20);
+
+  let xml = ooxmlResult.value;
+  xml = xml.replace(
+    /<w:pgSz\b[^>]*\/>/g,
+    `<w:pgSz w:w="${wTwips}" w:h="${hTwips}" w:orient="portrait"/>`
+  );
+  xml = xml.replace(
+    /<w:pgMar\b[^>]*\/>/g,
+    `<w:pgMar w:top="${topTwips}" w:right="${rightTwips}" w:bottom="${bottomTwips}" w:left="${leftTwips}" w:header="720" w:footer="720" w:gutter="0"/>`
+  );
+  body.insertOoxml(xml, Word.InsertLocation.replace);
+  await context.sync();
+  return "Updated A4 paper size and margins via OOXML fallback";
 });
 ```
 
-## Common Paper Sizes (points)
+## Read Current Page Setup (with Universal Fallback)
 
-| Paper | Width | Height |
-|---|---|---|
-| US Letter | 612 | 792 |
-| US Legal | 612 | 1008 |
-| A4 | 595 | 842 |
-| A3 | 842 | 1191 |
+```javascript
+await Word.run(async (context) => {
+  const sections = context.document.sections;
+  sections.load("items");
+  await context.sync();
 
-## Common Pitfalls
+  const firstSection = sections.items[0];
+  if (firstSection && firstSection.pageSetup) {
+    const ps = firstSection.pageSetup;
+    ps.load("topMargin,bottomMargin,leftMargin,rightMargin,orientation,pageWidth,pageHeight");
+    await context.sync();
+    return {
+      topMarginCm: +(ps.topMargin / 28.35).toFixed(2),
+      bottomMarginCm: +(ps.bottomMargin / 28.35).toFixed(2),
+      leftMarginCm: +(ps.leftMargin / 28.35).toFixed(2),
+      rightMarginCm: +(ps.rightMargin / 28.35).toFixed(2),
+      orientation: ps.orientation,
+      pageWidthPt: ps.pageWidth,
+      pageHeightPt: ps.pageHeight,
+    };
+  }
 
-- All margin and dimension values are in **points**, not inches or mm
-- When switching orientation, always set both `pageWidth` and `pageHeight` — Word does not swap them automatically
-- `pageSetup` is on `Word.Section`, not on `Word.Document` or `Word.Body`
-- To apply to the whole document, iterate `context.document.sections.items` and update each section
-- Requires Word JS API 1.5 or later
+  const ooxml = context.document.body.getOoxml();
+  await context.sync();
+  const pgSzMatch = ooxml.value.match(/<w:pgSz[^>]*w:w="(\d+)"[^>]*w:h="(\d+)"/);
+  const pgMarMatch = ooxml.value.match(/<w:pgMar[^>]*w:top="(\d+)"[^>]*w:right="(\d+)"[^>]*w:bottom="(\d+)"[^>]*w:left="(\d+)"/);
+  return {
+    widthCm: pgSzMatch ? +(parseInt(pgSzMatch[1], 10) / 567).toFixed(1) : 21.0,
+    heightCm: pgSzMatch ? +(parseInt(pgSzMatch[2], 10) / 567).toFixed(1) : 29.7,
+    topMarginCm: pgMarMatch ? +(parseInt(pgMarMatch[1], 10) / 567).toFixed(2) : 2.0,
+    rightMarginCm: pgMarMatch ? +(parseInt(pgMarMatch[2], 10) / 567).toFixed(2) : 1.5,
+    bottomMarginCm: pgMarMatch ? +(parseInt(pgMarMatch[3], 10) / 567).toFixed(2) : 2.0,
+    leftMarginCm: pgMarMatch ? +(parseInt(pgMarMatch[4], 10) / 567).toFixed(2) : 3.0,
+  };
+});
+```

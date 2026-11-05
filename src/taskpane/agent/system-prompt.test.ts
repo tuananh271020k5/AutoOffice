@@ -7,6 +7,11 @@ describe('buildSystemPrompt', () => {
     expect(p).toMatch(/respond to the user in \*\*English\*\* \(en\)/i);
   });
 
+  it('contains a Vietnamese-locale clause naming "Tiếng Việt"', () => {
+    const p = buildSystemPrompt('word', ['document'], 'vi');
+    expect(p).toMatch(/respond to the user in \*\*Tiếng Việt\*\* \(vi\)/i);
+  });
+
   it('contains a Hebrew-locale clause naming the native name', () => {
     const p = buildSystemPrompt('word', ['document'], 'he');
     expect(p).toMatch(/respond to the user in \*\*עברית\*\* \(he\)/i);

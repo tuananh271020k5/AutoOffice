@@ -1,22 +1,31 @@
 # Content Controls — Rich Text, Plain Text, Dropdowns, Checkboxes
 
 ## Key Types
-- `Word.ContentControl` — tag, title, type, appearance, color, placeholderText, cannotDelete, cannotEdit, temporary
-- Types: `Word.ContentControlType.richText`, `plainText`, `dropDownList`, `checkBox`
+- `Word.ContentControl` — `tag`, `title`, `type` (read-only), `appearance`, `color`, `placeholderText`, `cannotDelete`, `cannotEdit`, `removeWhenEdited`
+- Types (passed to `range.insertContentControl(type)`): `Word.ContentControlType.richText`, `plainText`, `dropDownList`, `checkBox`, `comboBox`
 
-## Insert a Content Control
+## Insert a Content Control (Safe Pattern — Works With or Without Selection)
 
 ```javascript
 await Word.run(async (context) => {
   const selection = context.document.getSelection();
-  const cc = selection.insertContentControl();
-  
-  cc.title = "My Field";
-  cc.tag = "field_1";
-  cc.appearance = Word.ContentControlAppearance.tags;
+  selection.load("text");
+  await context.sync();
+
+  // If the user has selected text, wrap the selection; otherwise insert a new paragraph at the end
+  let targetRange = selection;
+  if (!selection.text || selection.text.trim().length === 0) {
+    const para = context.document.body.insertParagraph("Nhập họ và tên tại đây", Word.InsertLocation.end);
+    targetRange = para.getRange();
+  }
+
+  const cc = targetRange.insertContentControl();
+  cc.title = "Họ và tên";
+  cc.tag = "full_name";
+  cc.appearance = Word.ContentControlAppearance.boundingBox;
   cc.color = "#0078D4";
-  cc.placeholderText = "Enter value here...";
-  
+  cc.placeholderText = "Nhập họ và tên...";
+
   await context.sync();
 });
 ```
@@ -28,17 +37,17 @@ await Word.run(async (context) => {
   const controls = context.document.contentControls;
   controls.load("items");
   await context.sync();
-  
+
   for (const cc of controls.items) {
     cc.load("tag,title,text");
   }
   await context.sync();
-  
-  for (const cc of controls.items) {
-    if (cc.tag === "field_1") {
-      console.log(cc.title, cc.text);
-    }
-  }
+
+  return controls.items.map(cc => ({
+    tag: cc.tag,
+    title: cc.title,
+    text: cc.text,
+  }));
 });
 ```
 
@@ -46,12 +55,12 @@ await Word.run(async (context) => {
 
 ```javascript
 await Word.run(async (context) => {
-  const controls = context.document.contentControls.getByTag("field_1");
+  const controls = context.document.contentControls.getByTag("full_name");
   controls.load("items");
   await context.sync();
-  
+
   if (controls.items.length > 0) {
-    controls.items[0].insertText("New value", Word.InsertLocation.replace);
+    controls.items[0].insertText("Nguyễn Văn A", Word.InsertLocation.replace);
     await context.sync();
   }
 });
@@ -60,13 +69,14 @@ await Word.run(async (context) => {
 ## Checkbox Content Control
 
 ```javascript
-// Insert a checkbox
+// Insert a checkbox (pass type to insertContentControl — cc.type is read-only!)
 await Word.run(async (context) => {
-  const selection = context.document.getSelection();
-  const cc = selection.insertContentControl();
-  cc.type = Word.ContentControlType.checkBox;
+  const para = context.document.body.insertParagraph(" Đồng ý điều khoản", Word.InsertLocation.end);
+  const startRange = para.getRange(Word.RangeLocation.start);
+  const cc = startRange.insertContentControl(Word.ContentControlType.checkBox);
   cc.tag = "agree_terms";
   cc.title = "Agree to Terms";
+  cc.checkboxContentControl.isChecked = true;
   await context.sync();
 });
 ```
@@ -78,13 +88,14 @@ await Word.run(async (context) => {
   controls.load("items");
   await context.sync();
 
-  const cc = controls.items[0];
-  const checked = cc.getCheckedState();
-  checked.load();
-  await context.sync();
+  if (controls.items.length > 0) {
+    const cc = controls.items[0];
+    cc.checkboxContentControl.load("isChecked");
+    await context.sync();
 
-  cc.setCheckedState(!checked.value); // toggle
-  await context.sync();
+    cc.checkboxContentControl.isChecked = !cc.checkboxContentControl.isChecked;
+    await context.sync();
+  }
 });
 ```
 
@@ -92,16 +103,15 @@ await Word.run(async (context) => {
 
 ```javascript
 await Word.run(async (context) => {
-  const selection = context.document.getSelection();
-  const cc = selection.insertContentControl();
-  cc.type = Word.ContentControlType.dropDownList;
+  const para = context.document.body.insertParagraph("", Word.InsertLocation.end);
+  const cc = para.getRange().insertContentControl(Word.ContentControlType.dropDownList);
   cc.tag = "status";
-  cc.title = "Status";
+  cc.title = "Trạng thái";
 
-  // Add choices to the dropdown
-  cc.dropdownListEntries.add("Draft", "draft");
-  cc.dropdownListEntries.add("In Review", "review");
-  cc.dropdownListEntries.add("Approved", "approved");
+  // Add choices via dropDownListContentControl.addListItem(displayText, value)
+  cc.dropDownListContentControl.addListItem("Bản nháp", "draft");
+  cc.dropDownListContentControl.addListItem("Đang duyệt", "review");
+  cc.dropDownListContentControl.addListItem("Đã phê duyệt", "approved");
 
   await context.sync();
 });
@@ -111,60 +121,50 @@ await Word.run(async (context) => {
 
 ```javascript
 await Word.run(async (context) => {
-  const controls = context.document.contentControls.getByTag("field_1");
+  const controls = context.document.contentControls.getByTag("full_name");
   controls.load("items");
   await context.sync();
 
-  const cc = controls.items[0];
-  cc.cannotDelete = true;  // user cannot delete the CC
-  cc.cannotEdit   = true;  // user cannot edit the CC's content
-  await context.sync();
+  if (controls.items.length > 0) {
+    const cc = controls.items[0];
+    cc.cannotDelete = true;  // user cannot delete the CC
+    cc.cannotEdit   = true;  // user cannot edit the CC's content
+    await context.sync();
+  }
 });
 ```
 
-## Temporary Content Control
+## Temporary Content Control (Remove When Edited)
 
 ```javascript
 await Word.run(async (context) => {
   const selection = context.document.getSelection();
   const cc = selection.insertContentControl();
-  cc.temporary = true; // CC is removed when user edits inside it
+  cc.removeWhenEdited = true; // CC is removed when user edits inside it (mutually exclusive with cannotDelete)
   await context.sync();
 });
 ```
 
-## Clear a Content Control's Content
+## Clear or Delete a Content Control
 
 ```javascript
 await Word.run(async (context) => {
-  const controls = context.document.contentControls.getByTag("field_1");
+  const controls = context.document.contentControls.getByTag("full_name");
   controls.load("items");
   await context.sync();
 
-  controls.items[0].clear();
-  await context.sync();
-});
-```
-
-## Delete a Content Control
-
-```javascript
-await Word.run(async (context) => {
-  const controls = context.document.contentControls.getByTag("field_1");
-  controls.load("items");
-  await context.sync();
-
-  // keepContent: true preserves the inner text; false removes it too
-  controls.items[0].delete(true);
-  await context.sync();
+  if (controls.items.length > 0) {
+    // keepContent: true preserves the inner text; false removes it too
+    controls.items[0].delete(true);
+    await context.sync();
+  }
 });
 ```
 
 ## Common Pitfalls
 
-- Content controls wrap existing content — select the content first, then wrap
-- Use `.getByTag()` or `.getByTitle()` for efficient lookups
-- `appearance` controls visual style: `tags` shows tag markers, `boundingBox` shows a box, `hidden` shows nothing
+- `cc.type` is **read-only**! Pass `Word.ContentControlType.*` as an argument to `range.insertContentControl(type)`
+- Use `cc.removeWhenEdited = true` (NOT `cc.temporary = true`)
+- Use `cc.checkboxContentControl.isChecked` (NOT `cc.getCheckedState()`)
+- Use `cc.dropDownListContentControl.addListItem(text, value)` (NOT `cc.dropdownListEntries.add`)
 - `cannotEdit = true` also blocks API writes to that control's content — set it only after populating
-- `getCheckedState()` returns a proxy — load its `value` before reading it
-- `temporary = true` means the CC auto-removes itself on first edit; useful for placeholder behaviour

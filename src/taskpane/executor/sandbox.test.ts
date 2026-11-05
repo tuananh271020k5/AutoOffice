@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Sandbox } from './sandbox.ts';
+import { Sandbox, normalizeWordCode } from './sandbox.ts';
 
 describe('Sandbox.execute — Office.js debug info', () => {
   beforeEach(() => {
@@ -49,5 +49,18 @@ describe('Sandbox.execute — Office.js debug info', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe('plain');
     expect(result.debugInfo).toBeUndefined();
+  });
+
+  it('normalizes body.insertParagraph with after/before, "\\n" spacer, and lowercase alignment', () => {
+    const input = `
+      const body = context.document.body;
+      const subHeader = body.insertParagraph("Độc lập - Tự do - Hạnh phúc", Word.InsertLocation.after);
+      subHeader.alignment = "centered";
+      const spacer = body.insertParagraph("\\n", Word.InsertLocation.after);
+    `;
+    const out = normalizeWordCode(input);
+    expect(out).toContain('body.insertParagraph("Độc lập - Tự do - Hạnh phúc", Word.InsertLocation.end)');
+    expect(out).toContain('subHeader.alignment = Word.Alignment.centered');
+    expect(out).toContain('body.insertParagraph("", Word.InsertLocation.end)');
   });
 });

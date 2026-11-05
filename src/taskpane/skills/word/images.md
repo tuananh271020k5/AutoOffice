@@ -1,26 +1,32 @@
 # Images — Inline Pictures
 
 ## Key Types
-- `Word.InlinePicture` — width, height, altTextTitle, altTextDescription, hyperlink
-- `Word.Body.insertInlinePictureFromBase64()` — insert image from base64 string
+- `Word.InlinePicture` — `width`, `height`, `altTextTitle`, `altTextDescription`, `hyperlink`, `paragraph`
+- `Word.Body.insertInlinePictureFromBase64()` — insert image from base64 string (without `data:image/...;base64,` prefix)
 
-## Insert Image from Base64
+## Insert Image from Base64 (With Sample Valid PNG Icon)
 
 ```javascript
 await Word.run(async (context) => {
   const body = context.document.body;
-  
-  // base64 is a base64-encoded image string (without the data:image prefix)
+
+  // Sample valid 64x64 blue square PNG in raw Base64 (no data:image/png;base64, prefix!)
+  const sampleBase64Png =
+    "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAdaElEQVR42u3bQREAAAjDMO5fNCCDkC4P2B0J" +
+    "ECBAgAABAgQIECBAgAABAgQIECBAgAABAgQIECBAgAABAgQIECBAgAABAgQIECBAgAABAgQIECBAgAABAgQIE" +
+    "CBAgAABAgQIECBAgAABAgQIECBAgAABAgQIECBAgAABAgQIECBAgMDbAIx7AAH108b6AAAAAElFTkSuQmCC";
+
   const picture = body.insertInlinePictureFromBase64(
-    base64ImageString,
+    sampleBase64Png,
     Word.InsertLocation.end
   );
-  
-  picture.width = 200;
-  picture.height = 150;
-  picture.altTextTitle = "Chart";
-  picture.altTextDescription = "Quarterly sales chart";
-  
+
+  picture.width = 100;
+  picture.height = 100;
+  picture.altTextTitle = "Logo minh họa";
+  picture.altTextDescription = "Hình ảnh minh họa được chèn tự động";
+  picture.paragraph.alignment = Word.Alignment.centered;
+
   await context.sync();
 });
 ```
@@ -32,36 +38,42 @@ await Word.run(async (context) => {
   const pictures = context.document.body.inlinePictures;
   pictures.load("items");
   await context.sync();
-  
+
   for (const pic of pictures.items) {
     pic.load("width,height,altTextTitle");
   }
   await context.sync();
-  
-  for (const pic of pictures.items) {
-    console.log(`${pic.altTextTitle}: ${pic.width}x${pic.height}`);
-  }
+
+  return pictures.items.map(pic => ({
+    title: pic.altTextTitle,
+    width: pic.width,
+    height: pic.height,
+  }));
 });
 ```
 
-## Resize an Image
+## Resize and Center All Images
 
 ```javascript
 await Word.run(async (context) => {
   const pictures = context.document.body.inlinePictures;
   pictures.load("items");
   await context.sync();
-  
-  if (pictures.items.length > 0) {
-    const pic = pictures.items[0];
+
+  for (const pic of pictures.items) {
     pic.load("width,height");
-    await context.sync();
-    
-    // Scale to 50%
-    pic.width = pic.width * 0.5;
-    pic.height = pic.height * 0.5;
-    await context.sync();
   }
+  await context.sync();
+
+  for (const pic of pictures.items) {
+    if (pic.width > 350) {
+      const ratio = 350 / pic.width;
+      pic.width = 350;
+      pic.height = Math.round(pic.height * ratio);
+    }
+    pic.paragraph.alignment = Word.Alignment.centered;
+  }
+  await context.sync();
 });
 ```
 
@@ -73,32 +85,14 @@ await Word.run(async (context) => {
   pictures.load("items");
   await context.sync();
 
+  if (pictures.items.length === 0) return null;
+
   const pic = pictures.items[0];
+  // getBase64ImageSrc() returns ClientResult<string> — do NOT call .load()!
   const base64 = pic.getBase64ImageSrc();
-  base64.load();
   await context.sync();
 
-  // Returns the raw base64 string (without the data:image prefix)
-  console.log("Base64 length:", base64.value.length);
   return base64.value;
-});
-```
-
-## Get Image Format
-
-```javascript
-await Word.run(async (context) => {
-  const pictures = context.document.body.inlinePictures;
-  pictures.load("items");
-  await context.sync();
-
-  for (const pic of pictures.items) {
-    pic.load("imageFormat");
-  }
-  await context.sync();
-
-  // imageFormat: "jpeg" | "png" | "gif" | "bmp" | "svg" | "undefined"
-  return pictures.items.map(p => p.imageFormat);
 });
 ```
 
@@ -110,14 +104,16 @@ await Word.run(async (context) => {
   pictures.load("items");
   await context.sync();
 
-  pictures.items[0].delete();
-  await context.sync();
+  if (pictures.items.length > 0) {
+    pictures.items[0].delete();
+    await context.sync();
+  }
 });
 ```
 
 ## Common Pitfalls
 
-- Base64 string must NOT include the `data:image/png;base64,` prefix — just the raw base64
-- Width and height are in points (1 point = 1/72 inch)
-- `insertInlinePictureFromBase64` is available on Body, Paragraph, Range, etc.
-- `getBase64ImageSrc()` returns a proxy — load its `value` before reading
+- Base64 string must NOT include the `data:image/png;base64,` prefix — strip it with `.replace(/^data:image\/\w+;base64,/, "")`
+- Width and height are in points (`1 pt = 1/72 inch`)
+- To align an inline picture, set `pic.paragraph.alignment = Word.Alignment.centered`
+- `getBase64ImageSrc()` returns `ClientResult<string>` — do NOT call `.load()`, just `await context.sync()` and read `base64.value`

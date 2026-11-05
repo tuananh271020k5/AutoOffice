@@ -1,73 +1,52 @@
-# OOXML & HTML — Import and Export Document Content
+# OOXML & HTML — Rich Content Boxes, Import & Export
 
-## Key Types
-- `Word.Body.getOoxml()` — export body as raw Open XML string
-- `Word.Body.insertOoxml(ooxml, insertLocation)` — insert Open XML content
-- `Word.Body.getHtml()` — export body as HTML string
-- `Word.Body.insertHtml(html, insertLocation)` — insert HTML content
-- Also available on `Word.Range`, `Word.Paragraph`, `Word.ContentControl`
+## Key Rules
+- **CRITICAL**: `getOoxml()` and `getHtml()` return `OfficeExtension.ClientResult<string>`. Do **NOT** call `.load()` on `ooxml` or `html`! Simply call `const ooxml = body.getOoxml(); await context.sync();` and read `ooxml.value`.
+- **CRITICAL FOR STYLED BOXES / CALLOUTS**: Never hand-write partial `<w:p>` XML into `insertOoxml` without a complete `<pkg:package>` wrapper, or Word will throw `GeneralException`!
+  - To create a styled notification box, callout box, or bordered frame, use **either** `body.insertTable(1, 1, ...)` with border/shading **or** the complete `<pkg:package>` template below!
 
-## Export Body as OOXML
-
-```javascript
-await Word.run(async (context) => {
-  const body = context.document.body;
-  const ooxml = body.getOoxml();
-  ooxml.load();
-  await context.sync();
-
-  console.log(ooxml.value); // raw Open XML string
-  return ooxml.value;
-});
-```
-
-## Insert OOXML into Document
+## Insert a Styled Callout / Notification Box (Reliable Table + Border / OOXML)
 
 ```javascript
 await Word.run(async (context) => {
   const body = context.document.body;
 
-  // insertOoxml replaces or inserts a block of raw Open XML
-  body.insertOoxml(
-    `<pkg:package xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage">
-       <pkg:part pkg:name="/_rels/.rels" pkg:contentType="application/vnd.openxmlformats-package.relationships+xml">
-         ...
-       </pkg:part>
-     </pkg:package>`,
-    Word.InsertLocation.end
-  );
+  // 1x1 styled callout box with double blue border and light blue background
+  const box = body.insertTable(1, 1, Word.InsertLocation.end, [
+    ["📌 THÔNG BÁO QUAN TRỌNG: Vui lòng kiểm tra kỹ nội dung và thời hạn trước khi trình ký."]
+  ]);
+  const cell = box.getCell(0, 0);
+  cell.shadingColor = "#EBF3FC";
+  cell.setCellPadding(Word.CellPaddingLocation.top, 8);
+  cell.setCellPadding(Word.CellPaddingLocation.bottom, 8);
+  cell.setCellPadding(Word.CellPaddingLocation.left, 12);
+  cell.setCellPadding(Word.CellPaddingLocation.right, 12);
+
+  const border = box.getBorder(Word.BorderLocation.all);
+  border.type = Word.BorderType.double;
+  border.color = "#0078D4";
+  border.width = 1.5;
+
+  const row = box.getRow(0);
+  row.font.name = "Times New Roman";
+  row.font.size = 13;
+  row.font.bold = true;
+  row.font.color = "#004578";
+
   await context.sync();
+  return "Inserted styled notification box";
 });
 ```
 
-## Copy a Range as OOXML (Clone Content)
-
-```javascript
-await Word.run(async (context) => {
-  // Capture the current selection as OOXML
-  const selection = context.document.getSelection();
-  const ooxml = selection.getOoxml();
-  ooxml.load();
-  await context.sync();
-
-  // Re-insert the captured OOXML elsewhere (e.g. at end of document)
-  const body = context.document.body;
-  body.insertOoxml(ooxml.value, Word.InsertLocation.end);
-  await context.sync();
-});
-```
-
-## Export Body as HTML
+## Export Body as OOXML or HTML
 
 ```javascript
 await Word.run(async (context) => {
   const body = context.document.body;
   const html = body.getHtml();
-  html.load();
-  await context.sync();
+  await context.sync(); // NO html.load() needed!
 
-  console.log(html.value);
-  return html.value;
+  return html.value.slice(0, 500);
 });
 ```
 
@@ -76,44 +55,10 @@ await Word.run(async (context) => {
 ```javascript
 await Word.run(async (context) => {
   const body = context.document.body;
-
   body.insertHtml(
-    "<h1>Title</h1><p>Paragraph with <strong>bold</strong> and <em>italic</em> text.</p>",
+    "<p style='font-family:Times New Roman;font-size:13pt;'><b>Ghi chú:</b> Nội dung được chèn từ HTML.</p>",
     Word.InsertLocation.end
   );
   await context.sync();
 });
 ```
-
-## Insert HTML at Current Selection
-
-```javascript
-await Word.run(async (context) => {
-  const selection = context.document.getSelection();
-  selection.insertHtml(
-    "<b>Replaced</b> with <i>HTML content</i>",
-    Word.InsertLocation.replace
-  );
-  await context.sync();
-});
-```
-
-## Insert External File Content (Base64)
-
-```javascript
-// Insert the content of another .docx file into the document
-await Word.run(async (context) => {
-  // base64Docx is a base64-encoded .docx file string
-  context.document.body.insertFileFromBase64(base64Docx, Word.InsertLocation.end);
-  await context.sync();
-});
-```
-
-## Common Pitfalls
-
-- `getOoxml()` and `getHtml()` return proxy objects — load their `value` property before reading
-- OOXML must be a valid `pkg:package` XML structure — malformed OOXML silently produces no output
-- `insertHtml` maps HTML formatting to Word styles; complex CSS is ignored — keep HTML simple
-- `insertOoxml` is the most faithful way to clone and paste rich content including tables, images, and styles
-- `insertFileFromBase64` inserts the body content of a .docx; it does not merge styles or headers/footers
-- All these methods are also available on `Word.Range` — use range-level calls to insert at a specific position

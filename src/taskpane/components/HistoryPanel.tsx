@@ -38,9 +38,25 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   filters: {
-    padding: '8px 12px',
+    padding: '6px 10px',
     borderBottom: `1px solid ${tokens.colorNeutralStroke1}`,
     flexShrink: 0,
+    overflowX: 'auto',
+    minWidth: 0,
+  },
+  docPill: {
+    display: 'inline-block',
+    maxWidth: '160px',
+    padding: '1px 6px',
+    borderRadius: '999px',
+    fontSize: '11px',
+    lineHeight: '16px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    backgroundColor: tokens.colorNeutralBackground3,
+    color: tokens.colorNeutralForeground2,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
   },
   list: {
     flex: 1,
@@ -74,6 +90,7 @@ const useStyles = makeStyles({
   rowMeta: {
     display: 'flex',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: '6px',
     color: tokens.colorNeutralForeground3,
     fontSize: '12px',
@@ -95,6 +112,7 @@ export interface HistoryPanelProps {
   conversations: ConversationSummary[];
   currentHost: HostKind;
   activeId: string | null;
+  currentDocumentKey?: string;
   onSelect: (id: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
@@ -228,6 +246,11 @@ export function HistoryPanel({
                   >
                     {t(hostBadgeKey(c.host))}
                   </Badge>
+                  {c.documentLabel && (
+                    <span className={styles.docPill} title={c.documentLabel}>
+                      📄 {c.documentLabel}
+                    </span>
+                  )}
                   <span>{formatRelativeAgo(c.updatedAt, formatRelativeTime)}</span>
                   <span>·</span>
                   <span>{formatPlural(c.messageCount, {

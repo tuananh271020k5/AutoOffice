@@ -9,6 +9,11 @@ describe('loader', () => {
     expect((dict as any).common.appName).toBe('AutoOffice');
   });
 
+  it('loads vi.json and returns Vietnamese strings', async () => {
+    const dict = await loadLocale('vi');
+    expect((dict as any).common.cancel).toBe('Hủy');
+  });
+
   it('loads he.json and returns Hebrew strings', async () => {
     const dict = await loadLocale('he');
     expect((dict as any).common.cancel).toBe('ביטול');

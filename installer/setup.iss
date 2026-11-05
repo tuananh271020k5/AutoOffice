@@ -175,7 +175,7 @@ begin
 end;
 
 [Messages]
-FinishedLabel=ההתקנה הסתיימה בהצלחה.%n%nכדי להשתמש בתוסף ב-Word, Excel או PowerPoint:%n%n1. פתח את Microsoft Word, Excel או PowerPoint%n2. עבור לעמוד הבית > תוספות%n3. לחץ על "תיקייה משותפת" בחלק התחתון%n4. בחר "AutoOffice" והקלק הוסף
+FinishedLabel=Cài đặt AutoOffice hoàn tất!%n%nĐể mở trợ lý AI trong Word, Excel hoặc PowerPoint:%n%n1. Mở Microsoft Word, Excel hoặc PowerPoint%n2. Vào thẻ Home > Add-ins > More Add-ins (hoặc Insert > My Add-ins)%n3. Chọn mục "Shared Folder" (Thư mục chia sẻ)%n4. Chọn "AutoOffice" và bấm Add (Thêm)
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"

@@ -1,18 +1,37 @@
 # Footnotes & Endnotes — NoteItem API
 
 ## Key Types
-- `Word.NoteItem` — body, reference, type
-- `Word.NoteItemCollection` — items array
+- `Word.NoteItem` — `body`, `reference`, `type`
+- `Word.NoteItemCollection` — `items` array
 - `Word.Body.footnotes` / `Word.Body.endnotes` — collections on the document body
-- `Word.NoteItemType` — footnote | endnote
+- `Word.NoteItemType` — `footnote` | `endnote`
 
-## Insert a Footnote
+## Insert a Footnote (Safe Pattern — Works With or Without Selection)
 
 ```javascript
 await Word.run(async (context) => {
   const selection = context.document.getSelection();
-  // insertFootnote returns the NoteItem
-  const footnote = selection.insertFootnote("This is the footnote text.");
+  selection.load("text");
+  const paragraphs = context.document.body.paragraphs;
+  paragraphs.load("items");
+  await context.sync();
+
+  let targetRange = selection;
+  if (!selection.text || selection.text.trim().length === 0) {
+    for (const p of paragraphs.items) {
+      p.load("text");
+    }
+    await context.sync();
+    const firstNonEmpty = paragraphs.items.find(p => p.text && p.text.trim().length > 0);
+    if (firstNonEmpty) {
+      targetRange = firstNonEmpty.getRange(Word.RangeLocation.end);
+    } else {
+      const p = context.document.body.insertParagraph("Văn bản tham chiếu", Word.InsertLocation.end);
+      targetRange = p.getRange(Word.RangeLocation.end);
+    }
+  }
+
+  const footnote = targetRange.insertFootnote("Căn cứ theo Bộ luật Lao động năm 2019.");
   await context.sync();
 });
 ```
@@ -21,8 +40,8 @@ await Word.run(async (context) => {
 
 ```javascript
 await Word.run(async (context) => {
-  const selection = context.document.getSelection();
-  const endnote = selection.insertEndnote("This appears at the end of the document.");
+  const endRange = context.document.body.getRange(Word.RangeLocation.end);
+  const endnote = endRange.insertEndnote("Ghi chú cuối tài liệu.");
   await context.sync();
 });
 ```
@@ -73,11 +92,12 @@ await Word.run(async (context) => {
   footnotes.load("items");
   await context.sync();
 
-  // Edit the first footnote
-  const first = footnotes.items[0];
-  first.body.clear();
-  first.body.insertText("Updated footnote text.", Word.InsertLocation.start);
-  await context.sync();
+  if (footnotes.items.length > 0) {
+    const first = footnotes.items[0];
+    first.body.clear();
+    first.body.insertText("Nội dung chú thích đã cập nhật.", Word.InsertLocation.start);
+    await context.sync();
+  }
 });
 ```
 
@@ -89,16 +109,16 @@ await Word.run(async (context) => {
   footnotes.load("items");
   await context.sync();
 
-  // Delete deletes both the note and its reference mark
-  footnotes.items[0].delete();
-  await context.sync();
+  if (footnotes.items.length > 0) {
+    footnotes.items[0].delete();
+    await context.sync();
+  }
 });
 ```
 
 ## Common Pitfalls
 
-- `insertFootnote` / `insertEndnote` are on `Word.Range` — call them on a selection or paragraph range
-- `NoteItem.body` is a full `Word.Body`; use standard body APIs (insertText, insertParagraph, etc.) to edit it
+- `insertFootnote` / `insertEndnote` are on `Word.Range` (NOT on `Word.Body` directly) — call them on `selection`, `paragraph.getRange(Word.RangeLocation.end)`, or `body.getRange(Word.RangeLocation.end)`
+- `NoteItem.body` is a full `Word.Body`; use standard body APIs (`insertText`, `insertParagraph`, etc.) to edit it
 - `NoteItem.reference` is the superscript number/symbol in the main text — it is read-only
-- Footnotes and endnotes are separate collections; `body.footnotes` does not include endnotes
 - Requires Word JS API 1.5 or later

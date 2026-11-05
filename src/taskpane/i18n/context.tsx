@@ -4,7 +4,7 @@ import React, {
 import { translationService } from './service.ts';
 import { detectLocale } from './detect.ts';
 import { loadStoredLocale, saveStoredLocale } from './storage.ts';
-import { LOCALES, DEFAULT_LOCALE, type LocaleId } from './registry.ts';
+import { LOCALES, isLocaleId, type LocaleId } from './registry.ts';
 import type { TranslationKey } from './keys.generated.ts';
 import type { TranslationParams } from './types.ts';
 import { makeFormatters, type Formatters } from './format.ts';
@@ -25,8 +25,21 @@ export interface LanguageProviderProps {
   initialLocale?: LocaleId;
 }
 
+function resolveDefaultStartupLocale(): LocaleId {
+  const saved = loadStoredLocale();
+  if (saved && isLocaleId(saved)) return saved;
+
+  const envLocale = (import.meta.env?.VITE_DEFAULT_LOCALE as string | undefined)?.trim();
+  if (envLocale && isLocaleId(envLocale)) return envLocale;
+
+  // Prefer Vietnamese ('vi') by default when no saved preference exists,
+  // while still supporting detectLocale for explicit detection calls.
+  if (isLocaleId('vi')) return 'vi';
+  return detectLocale({ saved });
+}
+
 export function LanguageProvider({ children, initialLocale }: LanguageProviderProps) {
-  const seed = initialLocale ?? detectLocale({ saved: loadStoredLocale() });
+  const seed = initialLocale ?? resolveDefaultStartupLocale();
   const [locale, setLocaleState] = useState<LocaleId>(seed);
   const [rev, force] = useState(0);
 

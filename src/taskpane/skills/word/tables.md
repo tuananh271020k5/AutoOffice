@@ -11,20 +11,26 @@
 ```javascript
 await Word.run(async (context) => {
   const body = context.document.body;
-  
-  // Insert a 3x3 table with values
+
+  // Insert a 3x3 table with values (all values must be strings)
   const values = [
-    ["Name", "Age", "City"],
-    ["Alice", "30", "NYC"],
-    ["Bob", "25", "LA"]
+    ["STT", "Họ và tên", "Chức vụ"],
+    ["1", "Nguyễn Văn A", "Trưởng phòng"],
+    ["2", "Trần Thị B", "Chuyên viên"]
   ];
-  
+
   const table = body.insertTable(values.length, values[0].length, Word.InsertLocation.end, values);
-  
+
   // Style the header row
   table.getRow(0).font.bold = true;
   table.getRow(0).shadingColor = "#D9E2F3";
-  
+
+  // Set visible borders
+  const border = table.getBorder(Word.BorderLocation.all);
+  border.type = Word.BorderType.single;
+  border.color = "#BFBFBF";
+  border.width = 0.75;
+
   await context.sync();
 });
 ```
@@ -36,13 +42,14 @@ await Word.run(async (context) => {
   const tables = context.document.body.tables;
   tables.load("items");
   await context.sync();
-  
+
+  if (tables.items.length === 0) return [];
+
   const table = tables.items[0];
   table.load("rowCount,columnCount,values");
   await context.sync();
-  
-  console.log("Rows:", table.rowCount);
-  console.log("Values:", table.values); // 2D array
+
+  return table.values; // 2D string array
 });
 ```
 
@@ -50,14 +57,18 @@ await Word.run(async (context) => {
 
 ```javascript
 await Word.run(async (context) => {
-  const table = context.document.body.tables.getFirst();
-  
+  const tables = context.document.body.tables;
+  tables.load("items");
+  await context.sync();
+  if (tables.items.length === 0) return;
+
+  const table = tables.items[0];
   // Get a specific cell (0-indexed)
   const cell = table.getCell(1, 2); // row 1, col 2
   cell.body.clear();
-  cell.body.insertText("New Value", Word.InsertLocation.start);
-  cell.shadingColor = "#FFFF00";
-  
+  cell.body.insertText("Chuyên viên chính", Word.InsertLocation.start);
+  cell.shadingColor = "#FFF2CC";
+
   await context.sync();
 });
 ```
@@ -66,14 +77,15 @@ await Word.run(async (context) => {
 
 ```javascript
 await Word.run(async (context) => {
-  const table = context.document.body.tables.getFirst();
-  
+  const tables = context.document.body.tables;
+  tables.load("items");
+  await context.sync();
+  if (tables.items.length === 0) return;
+
+  const table = tables.items[0];
   // Add a row at the end
-  table.addRows(Word.InsertLocation.end, 1, [["New", "Row", "Data"]]);
-  
-  // Add a column at the end
-  table.addColumns(Word.InsertLocation.end, 1, ["Header", "Val1", "Val2"]);
-  
+  table.addRows(Word.InsertLocation.end, 1, [["3", "Lê Văn C", "Nhân viên"]]);
+
   await context.sync();
 });
 ```
@@ -82,27 +94,13 @@ await Word.run(async (context) => {
 
 ```javascript
 await Word.run(async (context) => {
-  const table = context.document.body.tables.getFirst();
-  table.delete();
+  const tables = context.document.body.tables;
+  tables.load("items");
   await context.sync();
-});
-```
-
-## Delete a Row or Column
-
-```javascript
-await Word.run(async (context) => {
-  const table = context.document.body.tables.getFirst();
-  table.load("rowCount");
-  await context.sync();
-
-  // Delete the last row
-  table.getRow(table.rowCount - 1).delete();
-
-  // Delete column 0 on the first row's cell
-  table.getCell(0, 0).deleteColumn();
-
-  await context.sync();
+  if (tables.items.length > 0) {
+    tables.items[0].delete();
+    await context.sync();
+  }
 });
 ```
 
@@ -135,16 +133,15 @@ await Word.run(async (context) => {
 ```
 
 ```javascript
-// Read cell padding
+// Read cell padding (getCellPadding returns ClientResult<number> — do NOT call .load()!)
 await Word.run(async (context) => {
   const table = context.document.body.tables.getFirst();
   const cell = table.getCell(0, 0);
 
   const top = cell.getCellPadding(Word.CellPaddingLocation.top);
-  top.load();
   await context.sync();
 
-  console.log("Top padding:", top.value);
+  return top.value;
 });
 ```
 
@@ -153,38 +150,17 @@ await Word.run(async (context) => {
 ```javascript
 await Word.run(async (context) => {
   const table = context.document.body.tables.getFirst();
-
   table.autoFitWindow();     // fit table to page width
-  // or
   table.distributeColumns(); // make all columns equal width
   await context.sync();
 });
 ```
 
-## Table Style Flags (Banded Rows, First/Last Column, Total Row)
+## Apply a Built-In Table Style
 
 ```javascript
 await Word.run(async (context) => {
   const table = context.document.body.tables.getFirst();
-
-  table.styleBandedRows    = true;   // alternate row shading
-  table.styleBandedColumns = false;
-  table.styleFirstColumn   = true;   // bold first column
-  table.styleLastColumn    = false;
-  table.styleTotalRow      = true;   // highlight last row as totals row
-  table.styleHeaderRow     = true;   // highlight first row as header
-  await context.sync();
-});
-```
-
-## Apply a Table Style
-
-```javascript
-await Word.run(async (context) => {
-  const table = context.document.body.tables.getFirst();
-  // Use a built-in Word table style name (locale-dependent string)
-  table.style = "Table Grid";
-  // or a built-in enum value:
   table.styleBuiltIn = Word.BuiltInStyleName.tableGrid;
   await context.sync();
 });
@@ -200,19 +176,8 @@ await Word.run(async (context) => {
   const border = table.getBorder(Word.BorderLocation.all);
   border.type  = Word.BorderType.single;
   border.color = "#000000";
-  border.width = 1.5; // points
+  border.width = 1.0; // points
 
-  await context.sync();
-});
-```
-
-## Remove Table Borders
-
-```javascript
-await Word.run(async (context) => {
-  const table = context.document.body.tables.getFirst();
-  const border = table.getBorder(Word.BorderLocation.all);
-  border.type = Word.BorderType.none;
   await context.sync();
 });
 ```
@@ -221,10 +186,6 @@ await Word.run(async (context) => {
 
 - `insertTable` values is a 2D string array — all values must be strings
 - Cell indices are 0-based
-- `table.values` returns all data as a 2D string array (read-only snapshot)
 - Always `load("values")` before reading table data
-- `table.style` is locale-dependent (e.g. `"Tableau grille"` in French) — prefer `styleBuiltIn` when possible
-- `getBorder` returns a `Word.TableBorder` proxy; set its properties then call `context.sync()`
-- `mergeCells` indices are inclusive and 0-based: `(topRow, firstCol, bottomRow, lastCol)`
-- `getCellPadding` returns a proxy — load its `value` property before reading
-- `autoFitWindow()` and `distributeColumns()` are fire-and-forget; they take effect on `context.sync()`
+- Prefer `table.styleBuiltIn = Word.BuiltInStyleName.tableGrid` over locale-dependent `table.style`
+- `getCellPadding` returns `ClientResult<number>` — do NOT call `.load()`, just `await context.sync()` and read `.value`

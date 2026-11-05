@@ -1,19 +1,26 @@
 # Ranges — Selection, Manipulation, InsertLocation
 
 ## Key Types
-- `Word.Range` — text, font, paragraphs, hyperlink, insertText(), insertHtml(), insertBreak(), delete(), expand(), compareLocationWith()
-- `Word.InsertLocation` — before, after, start, end, replace
-- `Word.RangeLocation` — whole, start, end, before, after, content
-- `Word.LocationRelation` — equal, before, after, contains, inside, adjacentBefore, adjacentAfter, overlappingBefore, overlappingAfter, disconnected
+- `Word.Range` — `text`, `font`, `paragraphs`, `hyperlink`, `insertText()`, `insertHtml()`, `insertBreak()`, `delete()`, `expand()`, `compareLocationWith()`
+- `Word.InsertLocation` — `before`, `after`, `start`, `end`, `replace`
+- `Word.RangeLocation` — `whole`, `start`, `end`, `before`, `after`, `content`
+- `Word.LocationRelation` — `equal`, `before`, `after`, `contains`, `inside`, `adjacentBefore`, `adjacentAfter`, `overlappingBefore`, `overlappingAfter`, `disconnected`
 
-## Get Current Selection
+## Read Selection or Document Text (Safe Fallback When Nothing Selected)
 
 ```javascript
 await Word.run(async (context) => {
   const selection = context.document.getSelection();
+  const body = context.document.body;
   selection.load("text");
+  body.load("text");
   await context.sync();
-  console.log("Selected:", selection.text);
+
+  const selectedText = (selection.text || "").trim();
+  return {
+    hasSelection: selectedText.length > 0,
+    text: selectedText.length > 0 ? selectedText : (body.text || "").trim(),
+  };
 });
 ```
 
@@ -22,13 +29,13 @@ await Word.run(async (context) => {
 ```javascript
 await Word.run(async (context) => {
   const body = context.document.body;
-  
+
   // Insert at end of document
-  body.insertText("Hello World", Word.InsertLocation.end);
-  
-  // Insert paragraph break
+  body.insertText("Nội dung mới", Word.InsertLocation.end);
+
+  // Insert line break
   body.insertBreak(Word.BreakType.line, Word.InsertLocation.end);
-  
+
   await context.sync();
 });
 ```
@@ -39,7 +46,7 @@ await Word.run(async (context) => {
 await Word.run(async (context) => {
   const selection = context.document.getSelection();
   selection.insertHtml(
-    "<b>Bold text</b> and <i>italic text</i>",
+    "<b>Chữ in đậm</b> và <i>chữ in nghiêng</i>",
     Word.InsertLocation.replace
   );
   await context.sync();
@@ -58,32 +65,7 @@ await Word.run(async (context) => {
   paraRange.load("text");
   await context.sync();
 
-  console.log("Paragraph:", paraRange.text);
-});
-```
-
-## Expand a Range to a Word or Sentence
-
-```javascript
-await Word.run(async (context) => {
-  const selection = context.document.getSelection();
-
-  // expandTo grows the range to include the nearest enclosing unit
-  const wordRange = selection.expand(Word.RangeExpandTo.word);
-  wordRange.load("text");
-  await context.sync();
-
-  console.log("Word:", wordRange.text);
-});
-```
-
-## Delete a Range
-
-```javascript
-await Word.run(async (context) => {
-  const selection = context.document.getSelection();
-  selection.delete(); // removes the text from the document
-  await context.sync();
+  return paraRange.text;
 });
 ```
 
@@ -95,50 +77,19 @@ await Word.run(async (context) => {
   const body = context.document.body;
   const bodyRange = body.getRange(Word.RangeLocation.whole);
 
-  // Returns a LocationRelation enum value
+  // compareLocationWith returns ClientResult<LocationRelation> — do NOT call .load()!
   const relation = selection.compareLocationWith(bodyRange);
-  relation.load();
   await context.sync();
 
-  // e.g. "inside" means selection is fully within bodyRange
-  console.log("Relation:", relation.value);
+  return relation.value;
 });
 ```
 
-## Get a Specific Part of a Range
+## Programmatically Select / Highlight Text
 
 ```javascript
 await Word.run(async (context) => {
-  const body = context.document.body;
-
-  const start = body.getRange(Word.RangeLocation.start); // collapsed at start
-  const end   = body.getRange(Word.RangeLocation.end);   // collapsed at end
-
-  await context.sync();
-});
-```
-
-## Programmatically Move the Cursor / Set Selection
-
-```javascript
-await Word.run(async (context) => {
-  const para = context.document.body.paragraphs.getFirst();
-
-  // select(selectionMode): select | start | end
-  para.select(Word.SelectionMode.start); // move cursor to start of paragraph
-  // or
-  para.select(Word.SelectionMode.select); // select the whole paragraph
-  // or
-  para.select(Word.SelectionMode.end);   // move cursor to end
-
-  await context.sync();
-});
-```
-
-```javascript
-// Select a range programmatically
-await Word.run(async (context) => {
-  const results = context.document.body.search("important");
+  const results = context.document.body.search("ĐƠN XIN NGHỈ PHÉP");
   results.load("items");
   await context.sync();
 
@@ -151,9 +102,6 @@ await Word.run(async (context) => {
 
 ## Common Pitfalls
 
-- A `Range` can be empty (collapsed cursor position)
-- `insertText` returns a new Range representing the inserted text
-- Use `Word.InsertLocation.replace` to overwrite selected content
-- `insertBreak` types: `Word.BreakType.page`, `.line`, `.sectionNext`, etc.
-- `range.delete()` removes the content from the document permanently — there is no undo via the API
-- `compareLocationWith` returns a `Word.LocationRelation` proxy — load its `value` property before reading it
+- A `Range` from `getSelection()` is empty (`selection.text === ""`) when the user hasn't highlighted anything — always fall back to `context.document.body.text` when reading text for summarization/analysis!
+- **NEVER** overwrite `selection` when the user only asks to **summarize**, **analyze**, or **count** text — return the text from `execute_code` and answer in chat!
+- `compareLocationWith` returns `ClientResult<LocationRelation>` — do NOT call `.load()`, just `await context.sync()` and read `.value`

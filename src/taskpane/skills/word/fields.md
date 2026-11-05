@@ -1,31 +1,51 @@
-# Fields — Dynamic Content (Page Numbers, Date, TOC, etc.)
+# Fields — Dynamic Content (Table of Contents, Page Numbers, Date)
 
-## Key Types
-- `Word.Field` — code, result, type, locked
-- `Word.FieldCollection` — items array
-- `Word.Body.fields` — all fields in the body
-- `Word.FieldType` — enum of field types (Date, Page, NumPages, TOC, Ref, etc.)
+## Key Rules
+- **CRITICAL**: `insertField` is a method on **`Word.Range`**, NOT on `Word.Body`!
+  - Always get a Range first: `const range = context.document.body.getRange(Word.RangeLocation.start);` (or `.end`), then call `range.insertField(...)`.
+- Signature: `range.insertField(insertLocation, fieldType, text, removeFormatting)`
 
-## Insert a Field by Field Code
+## Insert a Table of Contents (TOC) at Start of Document
 
 ```javascript
 await Word.run(async (context) => {
   const body = context.document.body;
-  // Insert a DATE field at the end
-  // insertField(insertLocation, fieldType, fieldCode, promoteFieldSwitches)
-  body.insertField(Word.InsertLocation.end, Word.FieldType.date, 'DATE \\@ "MMMM d, yyyy"', true);
+  const paragraphs = body.paragraphs;
+  paragraphs.load("items,text,styleBuiltIn");
   await context.sync();
+
+  // Ensure headings exist; if none are styled as Heading 1/2, promote short section titles
+  let headingCount = 0;
+  for (const p of paragraphs.items) {
+    if (
+      p.styleBuiltIn === Word.BuiltInStyleName.heading1 ||
+      p.styleBuiltIn === Word.BuiltInStyleName.heading2
+    ) {
+      headingCount++;
+    }
+  }
+
+  const startRange = body.getRange(Word.RangeLocation.start);
+  const tocTitle = body.insertParagraph("MỤC LỤC", Word.InsertLocation.start);
+  tocTitle.font.name = "Times New Roman";
+  tocTitle.font.size = 14;
+  tocTitle.font.bold = true;
+  tocTitle.alignment = Word.Alignment.centered;
+
+  const tocRange = tocTitle.getRange(Word.RangeLocation.after);
+  tocRange.insertField(Word.InsertLocation.after, Word.FieldType.toc, '\\o "1-3" \\h \\z \\u', true);
+
+  await context.sync();
+  return { insertedToc: true, headingCount };
 });
 ```
 
-## Insert a Page Number Field
+## Insert a Date or Page Number Field
 
 ```javascript
 await Word.run(async (context) => {
-  const section = context.document.sections.getFirst();
-  const footer = section.getFooter(Word.HeaderFooterType.primary);
-  footer.clear();
-  footer.insertField(Word.InsertLocation.start, Word.FieldType.page, "PAGE", true);
+  const endRange = context.document.body.getRange(Word.RangeLocation.end);
+  endRange.insertField(Word.InsertLocation.end, Word.FieldType.date, 'DATE \\@ "dd/MM/yyyy"', true);
   await context.sync();
 });
 ```
@@ -52,55 +72,6 @@ await Word.run(async (context) => {
 });
 ```
 
-## Update (Refresh) All Fields
-
-```javascript
-await Word.run(async (context) => {
-  const fields = context.document.body.fields;
-  fields.load("items");
-  await context.sync();
-
-  for (const field of fields.items) {
-    field.updateResult();
-  }
-  await context.sync();
-});
-```
-
-## Lock / Unlock a Field
-
-```javascript
-await Word.run(async (context) => {
-  const fields = context.document.body.fields;
-  fields.load("items");
-  await context.sync();
-
-  for (const field of fields.items) {
-    field.load("locked");
-  }
-  await context.sync();
-
-  // Lock the first field so it doesn't update automatically
-  fields.items[0].locked = true;
-  await context.sync();
-});
-```
-
-## Common Field Type Codes
-
-| Purpose | FieldType enum | Field code example |
-|---|---|---|
-| Current date | `Word.FieldType.date` | `DATE \@ "yyyy-MM-dd"` |
-| Current page number | `Word.FieldType.page` | `PAGE` |
-| Total pages | `Word.FieldType.numPages` | `NUMPAGES` |
-| File name | `Word.FieldType.fileName` | `FILENAME` |
-| TOC | `Word.FieldType.toc` | `TOC \o "1-3"` |
-| Cross-reference | `Word.FieldType.ref` | `REF myBookmark` |
-
 ## Common Pitfalls
-
-- `Field.result` is a `Word.Range` (not a string) — load its `text` property after sync
-- `Field.code` is the raw field code string (e.g. `"DATE \\@ \"MMMM d, yyyy\""`); backslashes are doubled in JS strings
-- `updateResult()` refreshes the displayed value; some fields (TOC, DATE) only update when the document is recalculated or printed
-- `locked = true` prevents the field from updating — unlock before calling `updateResult()`
-- Requires Word JS API 1.5 or later
+- **NEVER call `body.insertField(...)` directly** — always call `body.getRange(Word.RangeLocation.start).insertField(...)` or `body.getRange(Word.RangeLocation.end).insertField(...)`.
+- `Field.result` is a `Word.Range` — load its `text` property before reading.

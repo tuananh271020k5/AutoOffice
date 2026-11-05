@@ -42,6 +42,10 @@ export interface ConversationSummary {
   totalUsd?: number;
   /** Source of `totalUsd`. Used by HistoryPanel to suppress $ when tokens-only. */
   costSource?: CostSource;
+  /** Isolated document/window key for multi-window project separation. */
+  documentKey?: string;
+  /** Human-readable project/file name (e.g. "DonXinNghiPhep.docx" or "Phiên #A1B2"). */
+  documentLabel?: string;
 }
 
 export interface Conversation extends ConversationSummary {
@@ -78,7 +82,7 @@ function writeIndex(index: ConversationSummary[]): void {
 }
 
 function summarize(c: Conversation): ConversationSummary {
-  return {
+  const summary: ConversationSummary = {
     id: c.id,
     title: c.title,
     host: c.host,
@@ -88,6 +92,9 @@ function summarize(c: Conversation): ConversationSummary {
     totalUsd: c.totalUsd,
     costSource: c.costSource,
   };
+  if (c.documentKey !== undefined) summary.documentKey = c.documentKey;
+  if (c.documentLabel !== undefined) summary.documentLabel = c.documentLabel;
+  return summary;
 }
 
 export function listConversations(): ConversationSummary[] {
@@ -218,7 +225,21 @@ export function deleteConversation(id: string): void {
   writeIndex(index);
 }
 
+export function clearAllHistory(): void {
+  const items = readIndex();
+  for (const s of items) {
+    localStorage.removeItem(blobKeyFor(s.id));
+  }
+  localStorage.removeItem(INDEX_KEY);
+}
+
 export function mostRecentForHost(host: HostKind): ConversationSummary | null {
   const matches = listConversations().filter(s => s.host === host);
+  return matches[0] ?? null;
+}
+
+export function mostRecentForDocument(host: HostKind, documentKey: string): ConversationSummary | null {
+  if (!documentKey) return null;
+  const matches = listConversations().filter(s => s.host === host && s.documentKey === documentKey);
   return matches[0] ?? null;
 }

@@ -2,4 +2,8 @@ node_modules
 dist
 installer/files
 installer/AutoOffice-Setup.exe
+installer/output
 .worktrees/
+.env
+.env.local
+.env.*.local

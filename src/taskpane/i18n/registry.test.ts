@@ -8,7 +8,10 @@ import {
 } from './registry.ts';
 
 describe('registry', () => {
-  it('exposes en and he locales with correct metadata', () => {
+  it('exposes vi, en, and he locales with correct metadata', () => {
+    expect(LOCALES.vi.direction).toBe('ltr');
+    expect(LOCALES.vi.fallback).toBe('en');
+    expect(LOCALES.vi.nativeName).toBe('Tiếng Việt');
     expect(LOCALES.en.direction).toBe('ltr');
     expect(LOCALES.en.fallback).toBeNull();
     expect(LOCALES.en.nativeName).toBe('English');
@@ -22,6 +25,7 @@ describe('registry', () => {
   });
 
   it('isLocaleId narrows valid ids', () => {
+    expect(isLocaleId('vi')).toBe(true);
     expect(isLocaleId('en')).toBe(true);
     expect(isLocaleId('he')).toBe(true);
     expect(isLocaleId('xx')).toBe(false);
@@ -30,12 +34,14 @@ describe('registry', () => {
 
   it('getLocaleMeta returns metadata for a known id', () => {
     expect(getLocaleMeta('he').direction).toBe('rtl');
+    expect(getLocaleMeta('vi').nativeName).toBe('Tiếng Việt');
   });
 
   it('availableLocales returns all registered locales as { id, ...meta } rows', () => {
     const list = availableLocales();
-    expect(list.map(l => l.id).sort()).toEqual(['en', 'he']);
+    expect(list.map(l => l.id).sort()).toEqual(['en', 'he', 'vi']);
     expect(list.find(l => l.id === 'he')!.nativeName).toBe('עברית');
+    expect(list.find(l => l.id === 'vi')!.nativeName).toBe('Tiếng Việt');
   });
 
   it('every fallback (when set) points at another registered locale', () => {

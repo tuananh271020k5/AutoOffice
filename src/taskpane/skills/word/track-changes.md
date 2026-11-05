@@ -1,11 +1,11 @@
 # Track Changes — TrackedChange API
 
 ## Key Types
-- `Word.TrackedChange` — author, date, type, range
-- `Word.TrackedChangeCollection` — items array; accept()/reject() all at once
+- `Word.TrackedChange` — `author`, `date`, `type`, `text`, `getRange()`, `accept()`, `reject()`
+- `Word.TrackedChangeCollection` — `items` array; `acceptAll()` / `rejectAll()`
 - `Word.Document.changeTrackingMode` — enable/disable tracking
-- `Word.ChangeTrackingMode` — off | trackAll | trackMineOnly
-- `Word.TrackedChangeType` — insertion | deletion | formatting | move
+- `Word.ChangeTrackingMode` — `off` | `trackAll` | `trackMineOnly`
+- `Word.TrackedChangeType` — `added` (`"Added"`) | `deleted` (`"Deleted"`) | `formatted` (`"Formatted"`) | `none` (`"None"`)
 
 ## Enable / Disable Track Changes
 
@@ -33,8 +33,7 @@ await Word.run(async (context) => {
   await context.sync();
 
   for (const change of changes.items) {
-    change.load("author,date,type");
-    change.range.load("text");
+    change.load("author,date,type,text");
   }
   await context.sync();
 
@@ -42,7 +41,7 @@ await Word.run(async (context) => {
     author: c.author,
     date: c.date,
     type: c.type,
-    text: c.range.text,
+    text: c.text,
   }));
 });
 ```
@@ -55,7 +54,6 @@ await Word.run(async (context) => {
   changes.load("items");
   await context.sync();
 
-  // Accept all at once
   changes.acceptAll();
   await context.sync();
 });
@@ -83,7 +81,7 @@ await Word.run(async (context) => {
   await context.sync();
 
   for (const change of changes.items) {
-    change.load("author");
+    change.load("author,type,text");
   }
   await context.sync();
 
@@ -105,8 +103,8 @@ await Word.run(async (context) => {
   context.document.load("changeTrackingMode");
   await context.sync();
 
-  console.log("Tracking mode:", context.document.changeTrackingMode);
-  // "off" | "trackAll" | "trackMineOnly"
+  return context.document.changeTrackingMode;
+  // "Off" | "TrackAll" | "TrackMineOnly"
 });
 ```
 
@@ -118,25 +116,25 @@ await Word.run(async (context) => {
   paragraphs.load("items");
   await context.sync();
 
-  // Get tracked changes only within a specific paragraph
+  if (paragraphs.items.length === 0) return [];
+
   const changes = paragraphs.items[0].getTrackedChanges();
   changes.load("items");
   await context.sync();
 
   for (const change of changes.items) {
-    change.load("author,type");
+    change.load("author,type,text");
   }
   await context.sync();
 
-  return changes.items.map(c => ({ author: c.author, type: c.type }));
+  return changes.items.map(c => ({ author: c.author, type: c.type, text: c.text }));
 });
 ```
 
 ## Common Pitfalls
 
-- Always load `changeTrackingMode` before reading it — it follows the normal proxy pattern
-- `changes.acceptAll()` / `changes.rejectAll()` operate on the loaded collection; always load items first
-- `TrackedChange.range` is the range affected by the change; load its `text` after the second sync
-- Accepting an insertion keeps the text; accepting a deletion removes it — this is the Word behavior
-- Changes made while `changeTrackingMode = off` are not tracked even if track changes was previously on
+- `TrackedChange.text` is a direct string property on `TrackedChange` — load `"author,date,type,text"` directly on `change`
+- To get the `Word.Range` of a tracked change, call `change.getRange()` (method), NOT `change.range`
+- Always load `changeTrackingMode` before reading it
+- `changes.acceptAll()` / `changes.rejectAll()` operate on the collection
 - Requires Word JS API 1.6 or later

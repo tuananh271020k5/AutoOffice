@@ -1,5 +1,5 @@
-import React from 'react';
-import { makeStyles, tokens, Button, Badge, Text } from '@fluentui/react-components';
+import React, { useMemo } from 'react';
+import { makeStyles, tokens, Button, Text } from '@fluentui/react-components';
 import {
   DismissCircle24Regular,
   Play24Regular,
@@ -13,26 +13,65 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     border: `1px solid ${tokens.colorNeutralStroke1}`,
     maxWidth: '100%',
+    minWidth: 0,
+    boxSizing: 'border-box',
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '6px 12px',
+    flexWrap: 'wrap',
+    gap: '6px',
+    padding: '6px 10px',
     backgroundColor: tokens.colorNeutralBackground4,
     borderBottom: `1px solid ${tokens.colorNeutralStroke1}`,
+    minWidth: 0,
+  },
+  headerTitle: {
+    flex: '1 1 0%',
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  statusPill: {
+    display: 'inline-block',
+    padding: '2px 8px',
+    borderRadius: '999px',
+    fontSize: '11px',
+    fontWeight: 600,
+    lineHeight: '16px',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+  },
+  statusInformative: {
+    backgroundColor: tokens.colorBrandBackground2,
+    color: tokens.colorBrandForeground1,
+  },
+  statusSuccess: {
+    backgroundColor: tokens.colorPaletteGreenBackground2,
+    color: tokens.colorPaletteGreenForeground1,
+  },
+  statusDanger: {
+    backgroundColor: tokens.colorPaletteRedBackground2,
+    color: tokens.colorPaletteRedForeground1,
+  },
+  statusWarning: {
+    backgroundColor: tokens.colorPaletteYellowBackground2,
+    color: tokens.colorPaletteYellowForeground2,
   },
   codeArea: {
-    padding: '12px',
+    padding: '10px',
     overflow: 'auto',
-    maxHeight: '300px',
+    maxHeight: '180px',
+    minWidth: 0,
   },
   code: {
     fontFamily: 'Consolas, "Courier New", monospace',
-    fontSize: '12px',
-    lineHeight: '1.5',
+    fontSize: '11.5px',
+    lineHeight: '1.45',
     whiteSpace: 'pre-wrap',
-    wordBreak: 'break-all',
+    wordBreak: 'break-word',
     margin: 0,
     color: tokens.colorNeutralForeground1,
   },
@@ -56,8 +95,9 @@ const useStyles = makeStyles({
   },
   actions: {
     display: 'flex',
+    flexWrap: 'wrap',
     gap: '8px',
-    padding: '8px 12px',
+    padding: '8px 10px',
     borderTop: `1px solid ${tokens.colorNeutralStroke1}`,
   },
   details: {
@@ -67,7 +107,7 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorPaletteRedBackground1,
   },
   summary: {
-    padding: '6px 12px',
+    padding: '6px 10px',
     cursor: 'pointer',
     fontSize: '12px',
     fontWeight: 600,
@@ -84,12 +124,12 @@ const useStyles = makeStyles({
     },
   },
   resultBody: {
-    padding: '8px 12px 12px 12px',
-    fontSize: '12px',
+    padding: '8px 10px 10px 10px',
+    fontSize: '11.5px',
     fontFamily: 'Consolas, "Courier New", monospace',
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
-    maxHeight: '300px',
+    maxHeight: '200px',
     overflow: 'auto',
     color: tokens.colorNeutralForeground1,
   },
@@ -100,21 +140,41 @@ const useStyles = makeStyles({
 
 type CodeStatus = 'streaming' | 'pending' | 'rejected' | 'running' | 'success' | 'error';
 
-const STATUS_COLORS: Record<CodeStatus, 'informative' | 'success' | 'danger' | 'warning'> = {
-  streaming: 'informative',
-  pending: 'informative',
-  rejected: 'warning',
-  running: 'informative',
-  success: 'success',
-  error: 'danger',
-};
-
 interface CodeBlockProps {
   code: string;
   status: CodeStatus;
   result?: string;
   onApprove?: () => void;
   onReject?: () => void;
+}
+
+/**
+ * Formats verbose KitchenSink4Word runtime scripts into a clean, readable MCP call preview
+ * so the 1,500-line helper body doesn't flood narrow taskpanes.
+ */
+function formatDisplayCode(rawCode: string): { headerLabel: string; formattedCode: string } {
+  const trimmed = rawCode.trim();
+  if (trimmed.startsWith('// [KitchenSink4Word]') || trimmed.startsWith('// [AutoOffice]')) {
+    const firstNewline = trimmed.indexOf('\n');
+    const firstLine = firstNewline !== -1 ? trimmed.slice(0, firstNewline).trim() : trimmed;
+    const match = /^\/\/\s*\[(?:KitchenSink4Word|AutoOffice)\]\s*([a-z0-9_]+)\.([a-z0-9_]+)\((.*)\)$/i.exec(firstLine);
+    if (match) {
+      const [, toolName, op, rawJson] = match;
+      try {
+        const parsed = JSON.parse(rawJson);
+        return {
+          headerLabel: `🛠️ ${toolName}.${op}`,
+          formattedCode: `// AutoOffice MCP Tool\nawait ${toolName}("${op}", ${JSON.stringify(parsed, null, 2)});`,
+        };
+      } catch {
+        return {
+          headerLabel: `🛠️ ${toolName}.${op}`,
+          formattedCode: firstLine,
+        };
+      }
+    }
+  }
+  return { headerLabel: 'office.js', formattedCode: rawCode };
 }
 
 export function CodeBlock({ code, status, result, onApprove, onReject }: CodeBlockProps) {
@@ -131,20 +191,30 @@ export function CodeBlock({ code, status, result, onApprove, onReject }: CodeBlo
   const isError = status === 'error';
   const showResult = (status === 'success' || status === 'error') && !!result;
 
+  const { headerLabel, formattedCode } = useMemo(() => formatDisplayCode(code), [code]);
+
+  const statusPillClass =
+    status === 'success' ? styles.statusSuccess :
+    status === 'error' ? styles.statusDanger :
+    status === 'rejected' ? styles.statusWarning :
+    styles.statusInformative;
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <Text size={200} weight="semibold">office.js</Text>
-        <Badge appearance="filled" color={STATUS_COLORS[status]}>
+        <Text size={200} weight="semibold" className={styles.headerTitle}>
+          {headerLabel}
+        </Text>
+        <span className={`${styles.statusPill} ${statusPillClass}`}>
           {STATUS_LABELS[status]}
-        </Badge>
+        </span>
       </div>
 
       <div className={styles.codeArea}>
         <pre className={styles.code}>
           {code === '' && status === 'streaming'
             ? <span className={styles.emptyHint}>{t('code.generatingCode')}</span>
-            : code}
+            : formattedCode}
           {status === 'streaming' && <span className={styles.caret} aria-hidden />}
         </pre>
       </div>

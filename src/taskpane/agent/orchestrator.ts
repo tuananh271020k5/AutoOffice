@@ -1,6 +1,7 @@
 import { streamText, tool, jsonSchema, stepCountIs, type ModelMessage } from 'ai';
 import { createModel } from './providers.ts';
 import { makeLookupSkillTool } from './tools.ts';
+import { makeKitchenSinkWordTools, captureLiveWordSnapshot, getCachedWordSelection } from './kitchensink-word-tools.ts';
 import { buildSystemPrompt } from './system-prompt.ts';
 import { listSkills } from '../skills/index.ts';
 import { translationService } from '../i18n/index.ts';
@@ -32,21 +33,11 @@ export interface ChatMessage {
 export interface OrchestratorCallbacks {
   onMessage: (message: ChatMessage) => void;
   onStreamToken: (token: string) => void;
-  /**
-   * Upsert a code-block message addressed by toolCallId. If no message with
-   * that id exists, a new assistant message is appended; otherwise the
-   * existing codeBlock is patched in place.
-   */
   onUpsertCodeBlock: (
     toolCallId: string,
     patch: { code?: string; status?: CodeBlockStatus; result?: string },
   ) => void;
   requestApproval: (code: string) => Promise<boolean>;
-  /**
-   * Emitted once per runAgent call after the stream settles, with the
-   * summed cost across all steps. Optional so that existing callsites
-   * (e.g. App.tsx) compile without changes until Task 10 wires it up.
-   */
   onTurnCost?: (cost: CallCost) => void;
 }
 
@@ -68,9 +59,14 @@ export async function runAgent(
     });
   }
 
+  const curSel = host === 'word' ? getCachedWordSelection() : '';
+  const effectiveUserContent = curSel
+    ? `${userMessage}\n\n[Vùng đang bôi chọn trên Word: "${curSel}" — Nếu yêu cầu sửa/thay thế/xóa vùng chọn, hãy ưu tiên gọi word_edit(op="edit_selection", args={ new_text: "..." })]`
+    : userMessage;
+
   const messages: ModelMessage[] = [
     ...conversationHistory,
-    { role: 'user', content: userMessage },
+    { role: 'user', content: effectiveUserContent },
   ];
 
   let retryCount = 0;
@@ -155,16 +151,27 @@ export async function runAgent(
 
   let capturedStreamError: unknown;
 
-  const systemPrompt = buildSystemPrompt(host, listSkills(host), translationService.getLocale());
+  // In Word, use exclusively the 10 KitchenSink4Word MCP tools for 100% deterministic accuracy
+  // and pre-read the live document + selection snapshot so the AI immediately sees what is selected/bolded/highlighted.
+  const activeTools = host === 'word'
+    ? {
+        ...makeKitchenSinkWordTools(sandbox, settings, callbacks),
+        ...mcpTools,
+      }
+    : {
+        lookup_skill: makeLookupSkillTool(host),
+        execute_code: executeCode,
+        ...mcpTools,
+      };
+
+  const liveSnapshot = host === 'word' ? await captureLiveWordSnapshot(sandbox) : '';
+  const systemPrompt = buildSystemPrompt(host, listSkills(host), translationService.getLocale()) + liveSnapshot;
+
   const result = streamText({
     model,
     system: systemPrompt,
     messages,
-    tools: {
-      lookup_skill: makeLookupSkillTool(host),
-      execute_code: executeCode,
-      ...mcpTools,
-    },
+    tools: activeTools,
     stopWhen: stepCountIs(settings.maxRetries + 5),
     onError: ({ error }) => {
       capturedStreamError = error;
@@ -186,7 +193,6 @@ export async function runAgent(
     },
   });
 
-  // Per-tool-call state for streaming `execute_code` input.
   const codeStreamBuffers = new Map<string, string>();
 
   try {
@@ -232,11 +238,6 @@ export async function runAgent(
     return messages;
   }
 
-  // Compute the per-turn cost from per-step usage and metadata, then emit.
-  // We sum per-step (rather than reading result.totalUsage + providerMetadata)
-  // because result.providerMetadata only exposes the LAST step's metadata,
-  // which would silently drop gateway/openrouter exact cost from earlier
-  // steps in a multi-step agent loop.
   try {
     const steps = await result.steps;
     const stepCosts = steps.map(step => computeCallCost({

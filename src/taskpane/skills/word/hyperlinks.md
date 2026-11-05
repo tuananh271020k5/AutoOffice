@@ -1,37 +1,30 @@
 # Hyperlinks — Insert, Read, and Remove Links
 
-## Key Types
-- `Word.Range.hyperlink` — string property; get/set the URL on a range
-- `Word.Body.getHyperlinkRanges()` — returns all ranges that have a hyperlink
+## Key Rules
+- `range.hyperlink` is a string property on **`Word.Range`** (or `Word.Paragraph`).
+- **CRITICAL**: `getHyperlinkRanges()` is on **`Word.Range`** (`context.document.body.getRange().getHyperlinkRanges()`), NOT on `Word.Body`!
 
-## Insert a Hyperlink on Selected Text
+## Insert a Hyperlink and List All Hyperlinks
 
 ```javascript
 await Word.run(async (context) => {
+  const body = context.document.body;
   const selection = context.document.getSelection();
-  // Setting .hyperlink turns the range into a clickable link
-  selection.hyperlink = "https://example.com";
+  selection.load("text");
   await context.sync();
-});
-```
 
-## Insert a Hyperlink on New Text
-
-```javascript
-await Word.run(async (context) => {
-  const body = context.document.body;
-  const range = body.insertText("Visit our site", Word.InsertLocation.end);
-  range.hyperlink = "https://example.com";
+  if (selection.text && selection.text.trim()) {
+    selection.hyperlink = "https://office.com";
+  } else {
+    const p = body.insertParagraph("Tham khảo cổng thông tin điện tử tại đây", Word.InsertLocation.end);
+    p.font.name = "Times New Roman";
+    p.font.size = 13;
+    const range = p.getRange();
+    range.hyperlink = "https://chinhphu.vn";
+  }
   await context.sync();
-});
-```
 
-## Read All Hyperlinks in the Document
-
-```javascript
-await Word.run(async (context) => {
-  const body = context.document.body;
-  const linkRanges = body.getHyperlinkRanges();
+  const linkRanges = body.getRange().getHyperlinkRanges();
   linkRanges.load("items");
   await context.sync();
 
@@ -44,43 +37,12 @@ await Word.run(async (context) => {
 });
 ```
 
-## Update a Hyperlink URL
-
-```javascript
-await Word.run(async (context) => {
-  const body = context.document.body;
-  const linkRanges = body.getHyperlinkRanges();
-  linkRanges.load("items");
-  await context.sync();
-
-  for (const r of linkRanges.items) {
-    r.load("hyperlink");
-  }
-  await context.sync();
-
-  for (const r of linkRanges.items) {
-    if (r.hyperlink === "https://old.example.com") {
-      r.hyperlink = "https://new.example.com";
-    }
-  }
-  await context.sync();
-});
-```
-
 ## Remove a Hyperlink
 
 ```javascript
 await Word.run(async (context) => {
   const selection = context.document.getSelection();
-  // Setting to empty string removes the hyperlink
   selection.hyperlink = "";
   await context.sync();
 });
 ```
-
-## Common Pitfalls
-
-- `range.hyperlink` is a plain string (the URL); it is not an object
-- Setting `.hyperlink = ""` removes the link but keeps the text
-- `getHyperlinkRanges()` returns only ranges that are hyperlinks — load `text` and `hyperlink` after the first sync
-- Internal (anchor) links use the `#bookmark` format: `range.hyperlink = "#myBookmark"`

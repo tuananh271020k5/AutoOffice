@@ -20,18 +20,42 @@ export interface McpToolsResult {
   failures: McpConnectFailure[];
 }
 
+export interface McpToolInfo {
+  name: string;
+  description: string;
+  serverName: string;
+}
+
+export async function inspectMcpServer(server: McpServerConfig): Promise<McpToolInfo[]> {
+  const trimmedUrl = server.url.trim();
+  if (!trimmedUrl) return [];
+  const client = await createMCPClient({
+    transport: {
+      type: server.transport === 'sse' ? 'sse' : 'http',
+      url: resolveUrl(trimmedUrl),
+      fetch: (url: RequestInfo | URL, init?: RequestInit) => fetch(url, init),
+    },
+  });
+  const tools = await client.tools();
+  return Object.entries(tools).map(([name, def]) => ({
+    name,
+    description: (def as { description?: string })?.description || '',
+    serverName: server.name,
+  }));
+}
+
 export async function getMcpTools(servers: McpServerConfig[]): Promise<McpToolsResult> {
   const allTools: ToolSet = {};
   const failures: McpConnectFailure[] = [];
 
-  const enabledServers = servers.filter(s => s.enabled && s.url);
+  const enabledServers = servers.filter(s => s.enabled && s.url && s.url.trim().length > 0);
 
   for (const server of enabledServers) {
     try {
       const client = await createMCPClient({
         transport: {
           type: server.transport === 'sse' ? 'sse' : 'http',
-          url: resolveUrl(server.url),
+          url: resolveUrl(server.url.trim()),
           fetch: (url: RequestInfo | URL, init?: RequestInit) => fetch(url, init),
         },
       });

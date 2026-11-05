@@ -6,6 +6,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite",
+    "dev-server": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "certs": "office-addin-dev-certs install",
@@ -18,10 +19,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "sideload:powerpoint": "office-addin-debugging start manifest.xml desktop --no-debug --app powerpoint",
-    "gen:i18n": "node --experimental-strip-types tools/gen-i18n-types.ts",
+    "gen:i18n": "node --experimental-strip-types tools/gen-i18n-types.ts || echo Using existing keys.generated.ts",
     "check:i18n": "node --experimental-strip-types tools/check-translations.ts",
+    "build:exe": "node --experimental-strip-types tools/build-exe.ts",
     "prebuild": "npm run gen:i18n",
     "pretest": "npm run gen:i18n"
+  },
+  "engines": {
+    "node": ">=22.0.0"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",

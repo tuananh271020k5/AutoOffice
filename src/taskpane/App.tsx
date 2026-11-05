@@ -1,22 +1,34 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { makeStyles, tokens } from '@fluentui/react-components';
 import type { ModelMessage } from 'ai';
-import type { HostContext, HostKind } from './host/context.ts';
+import {
+  getDocumentIdentity,
+  getWindowActiveConversationId,
+  setWindowActiveConversationId,
+  type HostContext,
+  type HostKind,
+} from './host/context.ts';
 import { ChatPanel } from './components/ChatPanel.tsx';
 import { SettingsPanel } from './components/SettingsPanel.tsx';
 import { HistoryPanel } from './components/HistoryPanel.tsx';
+import { ToolsCatalogPanel } from './components/ToolsCatalogPanel.tsx';
 import { runAgent, type ChatMessage, type OrchestratorCallbacks } from './agent/orchestrator.ts';
 import { generateTitle } from './agent/title.ts';
 import { Sandbox } from './executor/sandbox.ts';
 import { formatError } from './agent/errors.ts';
-import { loadSettings, saveSettings, type AppSettings } from './store/settings.ts';
+import {
+  loadSettings,
+  saveSettings,
+  hasActiveProviderApiKey,
+  type AppSettings,
+} from './store/settings.ts';
 import {
   saveConversation,
   getConversation,
   listConversations,
   renameConversation,
   deleteConversation,
-  mostRecentForHost,
+  mostRecentForDocument,
   CURRENT_VERSION,
   type Conversation,
   type ConversationSummary,
@@ -49,10 +61,13 @@ interface AppProps {
 
 export function App({ host }: AppProps) {
   const styles = useStyles();
+  const [docIdentity, setDocIdentity] = useState(() => getDocumentIdentity());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showToolsCatalog, setShowToolsCatalog] = useState(false);
+  const [draftPrompt, setDraftPrompt] = useState<string>('');
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
   const [pendingApproval, setPendingApproval] = useState<string | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -65,18 +80,50 @@ export function App({ host }: AppProps) {
   const approvalResolveRef = useRef<((approved: boolean) => void) | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Hydrate the most recent conversation for this host on mount.
+  // Hydrate ONLY the conversation belonging to THIS specific window/document session.
+  // Opening a new Word window or a different document starts a fresh, isolated chat
+  // so multiple Word windows never collide or inherit a closed file's context.
   useEffect(() => {
-    const recent = mostRecentForHost(host.kind);
-    if (!recent) return;
-    const conv = getConversation(recent.id);
-    if (!conv) return;
+    const identity = getDocumentIdentity();
+    setDocIdentity(identity);
+
+    const windowConvId = getWindowActiveConversationId();
+    const convFromWindow = windowConvId ? getConversation(windowConvId) : null;
+    const recentDoc = !convFromWindow
+      ? mostRecentForDocument(host.kind, identity.documentKey)
+      : null;
+    const conv = convFromWindow ?? (recentDoc ? getConversation(recentDoc.id) : null);
+
+    if (!conv) {
+      setMessages([]);
+      conversationHistory.current = [];
+      setActiveConversationId(null);
+      setActiveChatHost(null);
+      setActiveCost(undefined);
+      return;
+    }
+
     setMessages(conv.uiMessages);
     conversationHistory.current = conv.modelMessages;
     setActiveConversationId(conv.id);
+    setWindowActiveConversationId(conv.id);
     setActiveChatHost(conv.host);
     setActiveCost(conv.cost);
   }, [host.kind]);
+
+  // Sync history list & settings when another Word window updates localStorage concurrently
+  useEffect(() => {
+    const onStorageChange = (e: StorageEvent) => {
+      if (!e.key) return;
+      if (e.key.startsWith('autooffice_history_')) {
+        setHistorySummaries(listConversations());
+      } else if (e.key === 'autooffice_settings') {
+        setSettings(loadSettings());
+      }
+    };
+    window.addEventListener('storage', onStorageChange);
+    return () => window.removeEventListener('storage', onStorageChange);
+  }, []);
 
   useEffect(() => {
     const sandbox = new Sandbox(host.kind);
@@ -111,6 +158,20 @@ export function App({ host }: AppProps) {
     saveSettings(newSettings);
   }, []);
 
+  const handleSaveQuickApiKey = useCallback((providerId: string, apiKey: string, model: string) => {
+    const updatedProviders = settings.providers.map(p =>
+      p.id === providerId ? { ...p, apiKey: apiKey.trim() } : p
+    );
+    const nextSettings: AppSettings = {
+      ...settings,
+      selectedProviderId: providerId,
+      selectedModel: model || settings.selectedModel || 'gpt-4o',
+      providers: updatedProviders,
+    };
+    setSettings(nextSettings);
+    saveSettings(nextSettings);
+  }, [settings]);
+
   const handleApprove = useCallback((approved: boolean) => {
     if (approvalResolveRef.current) {
       approvalResolveRef.current(approved);
@@ -119,9 +180,6 @@ export function App({ host }: AppProps) {
     }
   }, []);
 
-  // Cancel any pending debounced save. The pending callback closes over an
-  // older Conversation object that, if allowed to fire, would write stale data
-  // (potentially under a different active id after the user switches/clears).
   const cancelPendingSave = useCallback(() => {
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
@@ -135,6 +193,7 @@ export function App({ host }: AppProps) {
     setMessages([]);
     conversationHistory.current = [];
     setActiveConversationId(null);
+    setWindowActiveConversationId(null);
     setActiveChatHost(null);
     setActiveCost(undefined);
   }, [isLoading, cancelPendingSave]);
@@ -147,6 +206,7 @@ export function App({ host }: AppProps) {
     setMessages(conv.uiMessages);
     conversationHistory.current = conv.modelMessages;
     setActiveConversationId(conv.id);
+    setWindowActiveConversationId(conv.id);
     setActiveChatHost(conv.host);
     setActiveCost(conv.cost);
     setShowHistory(false);
@@ -164,6 +224,7 @@ export function App({ host }: AppProps) {
       setMessages([]);
       conversationHistory.current = [];
       setActiveConversationId(null);
+      setWindowActiveConversationId(null);
       setActiveChatHost(null);
       setActiveCost(undefined);
     }
@@ -173,9 +234,9 @@ export function App({ host }: AppProps) {
   const handleSend = useCallback(async (text: string) => {
     if (!text.trim() || isLoading) return;
 
-    // Decide on (or create) the active conversation up front so we know its id
-    // before runAgent appends new turn messages. Use the latest UI messages
-    // captured *before* this user message, so first-turn detection is correct.
+    const currentIdentity = getDocumentIdentity();
+    setDocIdentity(currentIdentity);
+
     let convId = activeConversationId;
     let convHost: HostKind = activeChatHost ?? host.kind;
     let isFirstTurn = false;
@@ -184,6 +245,7 @@ export function App({ host }: AppProps) {
       convHost = host.kind;
       isFirstTurn = true;
       setActiveConversationId(convId);
+      setWindowActiveConversationId(convId);
       setActiveChatHost(convHost);
     }
 
@@ -237,8 +299,6 @@ export function App({ host }: AppProps) {
       },
     };
 
-    // Compute the placeholder title up front so the title-gen block below
-    // can rely on it without coordinating with the setMessages callback.
     const placeholder = isFirstTurn ? (placeholderTitle(text) || translationService.t('history.newChatPlaceholder')) : '';
 
     try {
@@ -259,16 +319,9 @@ export function App({ host }: AppProps) {
       setPendingApproval(null);
     }
 
-    // Snapshot the latest in-memory state by reading back from setState.
-    // First-turn saves go through immediately so the blob exists by the
-    // time generateTitle resolves; later turns can debounce.
     setMessages(currentMessages => {
       const now = Date.now();
       const existing = isFirstTurn ? null : getConversation(convId!);
-      // Use the in-memory activeCost as the running total rather than reading
-      // from disk: the previous turn's save may still be inside its debounce
-      // window. Skip the merge when the new turn-cost is empty (no tokens, no
-      // $) so the source label isn't demoted by a no-op turn.
       const accumulatedCost = turnCost && !isCallCostEmpty(turnCost)
         ? sumCallCosts([activeCost ?? emptyCallCost('estimated'), turnCost])
         : activeCost;
@@ -285,6 +338,8 @@ export function App({ host }: AppProps) {
         cost: accumulatedCost,
         totalUsd: accumulatedCost?.totalUsd,
         costSource: accumulatedCost?.source,
+        documentKey: existing?.documentKey ?? currentIdentity.documentKey,
+        documentLabel: existing?.documentLabel ?? currentIdentity.documentLabel,
       };
       setActiveCost(accumulatedCost);
       if (isFirstTurn) persistImmediate(conv);
@@ -292,19 +347,17 @@ export function App({ host }: AppProps) {
       return currentMessages;
     });
 
-    // Fire-and-forget LLM title generation on first turn only.
     if (isFirstTurn) {
       void generateTitle(conversationHistory.current, settings).then((newTitle) => {
         if (!newTitle) return;
         const current = getConversation(convId!);
         if (!current) return;
-        // Race-safe: only overwrite if the title is still the placeholder we set.
         if (current.title !== placeholder) return;
         renameConversation(convId!, newTitle);
         refreshSummaries();
       });
     }
-  }, [isLoading, settings, host, activeConversationId, activeChatHost, persistDebounced, persistImmediate, refreshSummaries]);
+  }, [isLoading, settings, host, activeConversationId, activeChatHost, activeCost, persistDebounced, persistImmediate, refreshSummaries]);
 
   if (showSettings) {
     return (
@@ -313,6 +366,10 @@ export function App({ host }: AppProps) {
           settings={settings}
           onChange={handleSettingsChange}
           onClose={() => setShowSettings(false)}
+          onHistoryCleared={() => {
+            refreshSummaries();
+            handleNewChat();
+          }}
         />
       </div>
     );
@@ -325,10 +382,25 @@ export function App({ host }: AppProps) {
           conversations={historySummaries}
           currentHost={host.kind}
           activeId={activeConversationId}
+          currentDocumentKey={docIdentity.documentKey}
           onSelect={handleLoadConversation}
           onRename={handleRename}
           onDelete={handleDelete}
           onClose={() => setShowHistory(false)}
+        />
+      </div>
+    );
+  }
+
+  if (showToolsCatalog) {
+    return (
+      <div className={styles.root}>
+        <ToolsCatalogPanel
+          host={host.kind}
+          mcpServers={settings.mcpServers}
+          onClose={() => setShowToolsCatalog(false)}
+          onRunSample={(prompt) => { void handleSend(prompt); }}
+          onFillSample={(prompt) => { setDraftPrompt(prompt); }}
         />
       </div>
     );
@@ -344,11 +416,17 @@ export function App({ host }: AppProps) {
         activeChatHost={activeChatHost}
         cost={activeCost}
         providerId={settings.selectedProviderId}
+        documentLabel={docIdentity.documentLabel}
+        hasApiKey={hasActiveProviderApiKey(settings)}
+        onSaveQuickApiKey={handleSaveQuickApiKey}
         onSend={handleSend}
         onApprove={handleApprove}
         onOpenSettings={() => setShowSettings(true)}
         onOpenHistory={() => setShowHistory(true)}
+        onOpenToolsCatalog={() => setShowToolsCatalog(true)}
         onNewChat={handleNewChat}
+        draftPrompt={draftPrompt}
+        onClearDraftPrompt={() => setDraftPrompt('')}
       />
     </div>
   );

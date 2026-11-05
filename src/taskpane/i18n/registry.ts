@@ -1,6 +1,7 @@
 import type { LocaleMeta } from './types.ts';
 
 export const LOCALES = {
+  vi: { name: 'Vietnamese', nativeName: 'Tiếng Việt', direction: 'ltr', fallback: 'en' },
   en: { name: 'English', nativeName: 'English', direction: 'ltr', fallback: null },
   he: { name: 'Hebrew',  nativeName: 'עברית',   direction: 'rtl', fallback: 'en' },
 } as const satisfies Record<string, LocaleMeta>;
