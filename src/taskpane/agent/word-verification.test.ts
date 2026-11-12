@@ -10,14 +10,14 @@ function observation(texts = ['Before', 'Keep']): WordObservation {
   return { text: texts.join('\r') + '\r', paragraphs: texts.map(text => ({ text, alignment: 'Left', font: { ...font } })),
     selection: { text: texts[0], font: { ...font } }, tables: [] };
 }
-const settings = { autoApprove: true, executionTimeout: 30000 } as AppSettings;
-function setup() {
+const settings = { autoApprove: true, previewWordChanges: false, executionTimeout: 30000 } as AppSettings;
+function setup(overrides: Partial<AppSettings> = {}) {
   const execute = vi.fn();
   const callbacks: OrchestratorCallbacks = {
     onMessage: vi.fn(), onStreamToken: vi.fn(), onUpsertCodeBlock: vi.fn(), requestApproval: vi.fn(async () => true),
   };
   const sandbox = { execute } as unknown as Sandbox;
-  const tools = makeKitchenSinkWordTools(sandbox, settings, callbacks);
+  const tools = makeKitchenSinkWordTools(sandbox, { ...settings, ...overrides }, callbacks);
   const call = (name: string, op: string, args = {}) => tools[name].execute!(
     { op, args }, { toolCallId: name + op, messages: [] },
   );
@@ -95,6 +95,39 @@ describe('Word postcondition checks', () => {
 });
 
 describe('Word tool verification integration', () => {
+  it('requires approval and recovery before a protected edit, even with auto-approval enabled', async () => {
+    const { execute, callbacks, call } = setup({ previewWordChanges: true });
+    callbacks.beforeWordMutation = vi.fn(async () => {});
+    execute.mockResolvedValueOnce(result(observation())).mockResolvedValueOnce(result(observation()))
+      .mockResolvedValueOnce(result(observation())).mockResolvedValueOnce(result('ok'))
+      .mockResolvedValueOnce(result(observation(['After', 'Keep'])));
+    await call('word_edit', 'edit_selection', { new_text: 'After' });
+    expect(callbacks.requestApproval).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ proposed: 'After' }));
+    expect(callbacks.beforeWordMutation).toHaveBeenCalledOnce();
+    expect(execute.mock.calls.filter(([code]) => !code.includes('verify.read_document'))).toHaveLength(1);
+  });
+  it('does not edit after rejection, including a later attempt with another editing tool', async () => {
+    const { execute, callbacks, call } = setup({ previewWordChanges: true });
+    vi.mocked(callbacks.requestApproval).mockResolvedValue(false);
+    execute.mockResolvedValue(result(observation()));
+    await call('word_edit', 'edit_selection', { new_text: 'After' });
+    await call('word_format', 'format_selection', { bold: true });
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0][0]).toContain('verify.read_document');
+    expect(callbacks.requestApproval).toHaveBeenCalledOnce();
+  });
+  it('rejects stale previews and never writes when the recovery copy fails', async () => {
+    const stale = setup({ previewWordChanges: true });
+    stale.execute.mockResolvedValueOnce(result(observation())).mockResolvedValueOnce(result(observation(['Manually changed', 'Keep'])));
+    expect(await stale.call('word_edit', 'edit_selection', { new_text: 'After' })).toContain('changed while approval');
+    expect(stale.execute.mock.calls.every(([code]) => code.includes('verify.read_document'))).toBe(true);
+    const broken = setup({ previewWordChanges: true });
+    broken.callbacks.beforeWordMutation = vi.fn(async () => { throw new Error('Backup failed'); });
+    broken.execute.mockResolvedValue(result(observation()));
+    await broken.call('word_edit', 'edit_selection', { new_text: 'After' });
+    expect(broken.execute.mock.calls.every(([code]) => code.includes('verify.read_document'))).toBe(true);
+    expect(broken.callbacks.onMessage).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(Object) }));
+  });
   it('reads before/action/after and sends independent evidence back to the model', async () => {
     const { execute, callbacks, call } = setup();
     execute.mockResolvedValueOnce(result(observation()))
@@ -138,7 +171,8 @@ describe('Word tool verification integration', () => {
     const sandbox = { execute: vi.fn() } as unknown as Sandbox;
     const tool = makeKitchenSinkWordTools(sandbox, { ...settings, autoApprove: false }, callbacks).word_edit;
     await tool.execute!({ op: 'edit_selection', args: { new_text: 'After' } }, { toolCallId: 'rejected', messages: [] });
-    expect(sandbox.execute).not.toHaveBeenCalled();
+    // A read for preview may occur, but a rejected operation must never execute a write.
+    expect(vi.mocked(sandbox.execute).mock.calls.every(([code]) => code.includes('verify.read_document'))).toBe(true);
   });
   it('serializes concurrent edits so each read-back belongs to its own mutation', async () => {
     const { execute, call } = setup();

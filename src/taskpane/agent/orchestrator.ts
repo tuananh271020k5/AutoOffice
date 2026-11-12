@@ -13,6 +13,7 @@ import { formatError, type FormattedError } from './errors.ts';
 import { extractPartialStringField } from './partial-json.ts';
 import { computeCallCost, sumCallCosts, emptyCallCost, type CallCost } from './pricing.ts';
 import type { WordVerification } from './word-verification.ts';
+import type { WordChangePreview } from './word-preview.ts';
 
 export type CodeBlockStatus = 'streaming' | 'pending' | 'rejected' | 'running' | 'success' | 'error';
 
@@ -39,7 +40,8 @@ export interface OrchestratorCallbacks {
     toolCallId: string,
     patch: { code?: string; status?: CodeBlockStatus; result?: string; verification?: WordVerification },
   ) => void;
-  requestApproval: (code: string) => Promise<boolean>;
+  requestApproval: (code: string, preview?: WordChangePreview) => Promise<boolean>;
+  beforeWordMutation?: () => Promise<void>;
   onTurnCost?: (cost: CallCost) => void;
 }
 

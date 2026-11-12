@@ -35,6 +35,9 @@ import {
 } from './store/history.ts';
 import { translationService } from './i18n/index.ts';
 import { sumCallCosts, emptyCallCost, isCallCostEmpty, type CallCost } from './agent/pricing.ts';
+import type { WordChangePreview } from './agent/word-preview';
+import { captureWordRecovery, openWordRecovery, type WordRecoveryCopy } from './agent/word-recovery';
+import { WordRecoveryPanel } from './components/WordRecoveryPanel';
 
 const useStyles = makeStyles({
   root: {
@@ -71,6 +74,11 @@ export function App({ host }: AppProps) {
   const [draftPrompt, setDraftPrompt] = useState<string>('');
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
   const [pendingApproval, setPendingApproval] = useState<string | null>(null);
+  const [pendingPreview, setPendingPreview] = useState<WordChangePreview | null>(null);
+  const [recoveryInfo, setRecoveryInfo] = useState<Pick<WordRecoveryCopy, 'documentLabel' | 'createdAt'> | null>(null);
+  const [preparingRecovery, setPreparingRecovery] = useState(false);
+  const [openingRecovery, setOpeningRecovery] = useState(false);
+  const [recoveryError, setRecoveryError] = useState(false);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [activeChatHost, setActiveChatHost] = useState<HostKind | null>(null);
   const [activeCost, setActiveCost] = useState<CallCost | undefined>(undefined);
@@ -81,6 +89,13 @@ export function App({ host }: AppProps) {
   const approvalResolveRef = useRef<((approved: boolean) => void) | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const turnRunningRef = useRef(false);
+  const recoveryRef = useRef<WordRecoveryCopy | null>(null);
+
+  useEffect(() => () => {
+    recoveryRef.current = null;
+    approvalResolveRef.current?.(false);
+    approvalResolveRef.current = null;
+  }, []);
 
   // Hydrate ONLY the conversation belonging to THIS specific window/document session.
   // Opening a new Word window or a different document starts a fresh, isolated chat
@@ -179,7 +194,18 @@ export function App({ host }: AppProps) {
       approvalResolveRef.current(approved);
       approvalResolveRef.current = null;
       setPendingApproval(null);
+      setPendingPreview(null);
     }
+  }, []);
+
+  const handleOpenRecovery = useCallback(async () => {
+    if (turnRunningRef.current || !recoveryRef.current) return;
+    turnRunningRef.current = true;
+    setOpeningRecovery(true);
+    setRecoveryError(false);
+    try { await openWordRecovery(recoveryRef.current); }
+    catch { setRecoveryError(true); }
+    finally { turnRunningRef.current = false; setOpeningRecovery(false); }
   }, []);
 
   const cancelPendingSave = useCallback(() => {
@@ -259,6 +285,7 @@ export function App({ host }: AppProps) {
     const historyStartLength = conversationHistory.current.length;
     const turnErrors: unknown[] = [];
     const toolResults: unknown[] = [];
+    let recoveryCaptured = false;
 
     const callbacks: OrchestratorCallbacks = {
       onMessage: (msg) => {
@@ -303,11 +330,26 @@ export function App({ host }: AppProps) {
           return copy;
         });
       },
-      requestApproval: (code) => {
+      requestApproval: (code, preview) => {
         setPendingApproval(code);
+        setPendingPreview(preview ?? null);
         return new Promise<boolean>((resolve) => {
           approvalResolveRef.current = resolve;
         });
+      },
+      beforeWordMutation: async () => {
+        if (recoveryCaptured) return;
+        setPreparingRecovery(true);
+        setRecoveryError(false);
+        try {
+          const copy = await captureWordRecovery(currentIdentity.documentLabel);
+          recoveryRef.current = copy;
+          setRecoveryInfo({ documentLabel: copy.documentLabel, createdAt: copy.createdAt });
+          recoveryCaptured = true;
+        } catch {
+          setRecoveryError(true);
+          throw new Error(translationService.t('recovery.captureFailed'));
+        } finally { setPreparingRecovery(false); }
       },
     };
 
@@ -331,6 +373,7 @@ export function App({ host }: AppProps) {
       turnRunningRef.current = false;
       setIsLoading(false);
       setPendingApproval(null);
+      setPendingPreview(null);
     }
 
     setMessages(currentMessages => {
@@ -381,6 +424,8 @@ export function App({ host }: AppProps) {
       provider: settings.selectedProviderId, model: settings.selectedModel,
       hasApiKey: hasActiveProviderApiKey(settings), autoApprove: settings.autoApprove,
       busy: turnRunningRef.current, pendingApproval: Boolean(pendingApproval),
+      previewWordChanges: settings.previewWordChanges !== false,
+      recoveryAvailable: Boolean(recoveryRef.current),
     }),
     send: handleSend,
   });
@@ -390,6 +435,8 @@ export function App({ host }: AppProps) {
       provider: settings.selectedProviderId, model: settings.selectedModel,
       hasApiKey: hasActiveProviderApiKey(settings), autoApprove: settings.autoApprove,
       busy: turnRunningRef.current, pendingApproval: Boolean(pendingApproval),
+      previewWordChanges: settings.previewWordChanges !== false,
+      recoveryAvailable: Boolean(recoveryRef.current),
     }),
     send: handleSend,
   };
@@ -459,8 +506,9 @@ export function App({ host }: AppProps) {
       <ChatPanel
         host={host}
         messages={messages}
-        isLoading={isLoading}
+        isLoading={isLoading || openingRecovery}
         pendingApproval={pendingApproval}
+        pendingPreview={pendingPreview}
         activeChatHost={activeChatHost}
         cost={activeCost}
         providerId={settings.selectedProviderId}
@@ -476,6 +524,11 @@ export function App({ host }: AppProps) {
         draftPrompt={draftPrompt}
         onClearDraftPrompt={() => setDraftPrompt('')}
       />
+      {host.kind === 'word' && <WordRecoveryPanel
+        documentLabel={recoveryInfo?.documentLabel} createdAt={recoveryInfo?.createdAt}
+        preparing={preparingRecovery} opening={openingRecovery} busy={isLoading || openingRecovery}
+        error={recoveryError} onOpen={() => void handleOpenRecovery()}
+      />}
       {import.meta.env.DEV && __AUTOOFFICE_TEST_BRIDGE__ && testBridgeState && (
         <div role="status" style={{ padding: '4px 10px', fontSize: 11, background: '#fff4ce' }}>
           {testBridgeState}

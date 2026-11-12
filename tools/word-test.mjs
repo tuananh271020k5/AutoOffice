@@ -64,9 +64,31 @@ async function main() {
     console.log(JSON.stringify(await request(`/commands/${encodeURIComponent(sessionId)}`), null, 2)); return;
   }
   if (!sessionId) throw new Error('Usage: npm run test:word -- sessions | status|snapshot|suite <sessionId> | run|select <sessionId> <text> | fixture <sessionId> <JSON array> | result <commandId>');
+  if (action === 'preview-test') {
+    const decision = rest[0];
+    if (!['accept', 'reject'].includes(decision)) throw new Error('preview-test requires accept or reject.');
+    const status = await execute(sessionId, 'status');
+    if (!status.previewWordChanges) throw new Error('Enable Word preview/recovery before testing this feature.');
+    await execute(sessionId, 'fixture', { paragraphs: ['AUTO-OFFICE-PREVIEW-BEFORE', 'AUTO-OFFICE-KEEP'] });
+    await execute(sessionId, 'select', { text: 'AUTO-OFFICE-PREVIEW-BEFORE' });
+    console.error(`Waiting for ${decision} in the Word preview panel. The CLI does not approve on your behalf.`);
+    const result = await execute(sessionId, 'run', {
+      prompt: 'Chỉ thay phần đang bôi chọn bằng đúng AUTO-OFFICE-PREVIEW-AFTER. Giữ nguyên phần còn lại. Nếu tôi từ chối thì dừng chỉnh sửa.',
+    });
+    const expected = decision === 'accept' ? 'AUTO-OFFICE-PREVIEW-AFTER\nAUTO-OFFICE-KEEP'
+      : 'AUTO-OFFICE-PREVIEW-BEFORE\nAUTO-OFFICE-KEEP';
+    const passed = result.after.text.replace(/\r\n?/g, '\n').trim() === expected &&
+      (decision !== 'reject' || result.turn.toolResults.some(tool => tool.status === 'rejected'));
+    const reportFile = path.join(outputDir, `preview-${decision}.json`);
+    fs.writeFileSync(reportFile, JSON.stringify({ decision, passed, result }, null, 2));
+    console.log(JSON.stringify({ decision, passed, reportFile }, null, 2));
+    if (!passed) process.exitCode = 1;
+    return;
+  }
   if (action === 'suite') {
     const status = await execute(sessionId, 'status');
     if (!status.hasApiKey) throw new Error('AI provider is not configured in the add-in. Enter your key in AutoOffice settings, never in this CLI.');
+    if (status.previewWordChanges) throw new Error('Word preview/recovery is enabled. Use individual run commands and approve/reject in Word, or explicitly disable preview in Settings before running the unattended suite.');
     if (!status.autoApprove) throw new Error('The unattended suite requires AutoOffice auto-approval enabled. Individual run commands still support manual approval in Word.');
     const cases = [];
     const clean = text => String(text).replace(/\r\n?/g, '\n').trim();

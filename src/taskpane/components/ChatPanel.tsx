@@ -25,6 +25,8 @@ import { CrossHostBanner } from './CrossHostBanner.tsx';
 import { useTranslation, type TranslationKey } from '../i18n/index.ts';
 import { MessageBubble } from './MessageBubble.tsx';
 import { CodeBlock } from './CodeBlock.tsx';
+import { WordChangePreview } from './WordChangePreview';
+import type { WordChangePreview as Preview } from '../agent/word-preview';
 import { CostBadge } from './CostBadge.tsx';
 import type { CallCost } from '../agent/pricing.ts';
 import { listSkills } from '../skills/index.ts';
@@ -114,6 +116,8 @@ const QUICK_DEFAULT_MODELS: Record<string, string> = {
 
 const useStyles = makeStyles({
   container: {
+    flex: '1 1 0%',
+    minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
@@ -299,6 +303,8 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground1,
   },
   approvalArea: {
+    maxHeight: '45vh',
+    overflowY: 'auto',
     padding: '8px 10px',
     borderTop: `1px solid ${tokens.colorNeutralStroke1}`,
     flexShrink: 0,
@@ -331,6 +337,7 @@ interface ChatPanelProps {
   messages: ChatMessage[];
   isLoading: boolean;
   pendingApproval: string | null;
+  pendingPreview?: Preview | null;
   /** Host of the currently-loaded conversation; null = no active conversation. */
   activeChatHost: HostKind | null;
   /** Running total cost for the active conversation. */
@@ -353,7 +360,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({
-  host, messages, isLoading, pendingApproval, activeChatHost, cost, providerId,
+  host, messages, isLoading, pendingApproval, pendingPreview, activeChatHost, cost, providerId,
   documentLabel, hasApiKey = true, onSaveQuickApiKey,
   onSend, onApprove, onOpenSettings, onOpenHistory, onOpenToolsCatalog, onNewChat,
   draftPrompt, onClearDraftPrompt,
@@ -622,12 +629,14 @@ export function ChatPanel({
 
       {pendingApproval && (
         <div className={styles.approvalArea}>
-          <CodeBlock
+          {pendingPreview ? <WordChangePreview
+            preview={pendingPreview} onApprove={() => onApprove(true)} onReject={() => onApprove(false)}
+          /> : <CodeBlock
             code={pendingApproval}
             status="pending"
             onApprove={() => onApprove(true)}
             onReject={() => onApprove(false)}
-          />
+          />}
         </div>
       )}
 

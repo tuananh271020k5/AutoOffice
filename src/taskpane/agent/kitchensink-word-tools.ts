@@ -3,6 +3,7 @@ import type { Sandbox } from '../executor/sandbox.ts';
 import type { AppSettings } from '../store/settings.ts';
 import type { OrchestratorCallbacks } from './orchestrator.ts';
 import { formatError } from './errors.ts';
+import { buildWordPreview, sameApprovalState, pinWordSelection, selectPinnedRange, releasePinnedRange } from './word-preview.ts';
 import {
   isWordMutation, observeWordDocument, verifyWordMutation, wordReadBackForModel,
   type WordObservation, type WordVerification,
@@ -1735,6 +1736,7 @@ export function makeKitchenSinkWordTools(
   // The SDK may request several tools concurrently. Keep each edit + read-back atomic
   // relative to other built-in calls so a second edit cannot contaminate its evidence.
   let queue: Promise<unknown> = Promise.resolve();
+  let writeRejected = false;
   const sequential = <T>(work: () => Promise<T>): Promise<T> => {
     const next = queue.then(work);
     queue = next.catch(() => {});
@@ -1763,24 +1765,62 @@ export function makeKitchenSinkWordTools(
       }),
       execute: async ({ op, args = {} }, { toolCallId }) => sequential(async () => {
         const code = buildKs4wScript(meta.name, op, args);
+        let pinnedSelection: Word.Range | undefined;
         try {
-          if (!settings.autoApprove) {
-            callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'pending' });
-          }
-          const approved = settings.autoApprove || await callbacks.requestApproval(code);
-          if (!approved) {
-            callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'rejected' });
-            return 'User rejected the operation.';
-          }
-
-          callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'running' });
           const mutation = isWordMutation(meta.name, op, args);
+          if (mutation && writeRejected) return 'No operation executed. The user rejected edits in this turn; stop editing until a new user request.';
+          const protectedWrite = mutation && settings.previewWordChanges !== false;
+          const needsApproval = mutation && (protectedWrite || !settings.autoApprove);
           const selectionBefore = getCachedWordSelection();
           let before: WordObservation | undefined;
           if (mutation) {
             try { before = await observeWordDocument(sandbox, settings.executionTimeout); }
-            catch { /* Still read after the action, but do not certify it without a baseline. */ }
+            catch { /* A protected write below requires a complete preview baseline. */ }
           }
+          if (protectedWrite && !before) {
+            callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'error' });
+            return 'The document could not be read for preview. No operation was executed. Ask the user to try again after checking Word.';
+          }
+          if (needsApproval) {
+            if (before?.selection.text) pinnedSelection = await pinWordSelection();
+            callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'pending' });
+          }
+          const approved = !needsApproval || await callbacks.requestApproval(code,
+            before ? buildWordPreview(meta.name, op, args, before, selectionBefore) : undefined);
+          if (!approved) {
+            writeRejected = true;
+            callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'rejected' });
+            return 'User rejected the operation. Do not retry or substitute another editing tool in this turn; leave the document unchanged until a new request.';
+          }
+          if (needsApproval && before) {
+            let current = await observeWordDocument(sandbox, settings.executionTimeout);
+            if (pinnedSelection && (!current.selection.text || current.selection.text === before.selection.text)) {
+              await selectPinnedRange(pinnedSelection);
+              setCachedWordSelection(before.selection.text);
+              current = await observeWordDocument(sandbox, settings.executionTimeout);
+            }
+            if (!sameApprovalState(before, current, selectionBefore, pinnedSelection ? selectionBefore : getCachedWordSelection())) {
+              callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'rejected' });
+              return 'The document or selection changed while approval was pending. Nothing was executed. Read the current document and request approval for a fresh preview before editing.';
+            }
+          }
+          if (protectedWrite) {
+            if (!callbacks.beforeWordMutation) throw new Error('Document recovery is not available; the protected operation was not executed.');
+            await callbacks.beforeWordMutation();
+            // The asynchronous full-document backup may take time. Check again before writing.
+            let current = await observeWordDocument(sandbox, settings.executionTimeout);
+            if (pinnedSelection && (!current.selection.text || current.selection.text === before!.selection.text)) {
+              await selectPinnedRange(pinnedSelection);
+              setCachedWordSelection(before!.selection.text);
+              current = await observeWordDocument(sandbox, settings.executionTimeout);
+            }
+            if (!sameApprovalState(before!, current, selectionBefore, pinnedSelection ? selectionBefore : getCachedWordSelection())) {
+              callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'rejected' });
+              return 'The document changed while creating its recovery copy. Nothing was executed. Read it again and request approval for an updated preview.';
+            }
+          }
+
+          callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'running' });
           const result = await sandbox.execute(code, settings.executionTimeout);
 
           if (result.success) {
@@ -1825,8 +1865,11 @@ export function makeKitchenSinkWordTools(
           return `Operation ${meta.name}.${op} failed: ${result.error}`;
         } catch (err) {
           const formatted = formatError(err, { phase: 'tool-execute', tool: meta.name });
+          callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'error', result: formatted.detail });
           callbacks.onMessage({ role: 'assistant', content: '', error: formatted });
           return `Tool failed: ${formatted.title}. ${formatted.detail}`;
+        } finally {
+          if (pinnedSelection) await releasePinnedRange(pinnedSelection);
         }
       }),
     });

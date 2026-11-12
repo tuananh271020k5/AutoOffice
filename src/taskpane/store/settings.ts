@@ -19,6 +19,8 @@ export interface AppSettings {
   selectedModel: string;
   providers: ProviderConfig[];
   autoApprove: boolean;
+  /** Word writes always show a preview and keep a recovery copy when enabled. */
+  previewWordChanges?: boolean;
   mcpServers: McpServerConfig[];
   maxRetries: number;
   executionTimeout: number;
@@ -73,6 +75,7 @@ export function buildDefaultSettings(): AppSettings {
     selectedModel: defaultModel,
     providers,
     autoApprove,
+    previewWordChanges: true,
     mcpServers: [],
     maxRetries,
     executionTimeout: timeoutSec * 1000,

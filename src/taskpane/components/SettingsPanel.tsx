@@ -285,6 +285,11 @@ export function SettingsPanel({ settings, onChange, onClose, onHistoryCleared }:
         <div className={styles.section}>
           <Text weight="semibold" size={300}>{t('settings.executionSection')}</Text>
 
+          <Field label={t('settings.previewWordLabel')} hint={t('settings.previewWordHint')}>
+            <Switch checked={settings.previewWordChanges !== false}
+              onChange={(_, data) => onChange({ ...settings, previewWordChanges: data.checked })} />
+          </Field>
+
           <Field label={t('settings.autoApproveLabel')}>
             <Switch
               checked={settings.autoApprove}
