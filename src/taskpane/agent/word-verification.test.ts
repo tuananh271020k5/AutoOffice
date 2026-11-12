@@ -73,6 +73,23 @@ describe('Word postcondition checks', () => {
     after.selection.font.bold = null;
     expect(verifyWordMutation('word_format', 'format_selection', { bold: true }, before, after).status).toBe('failed');
   });
+  it('verifies the font of a unique partial replacement rather than the whole paragraph', () => {
+    const before = observation(['letter a', 'Keep']);
+    before.selection.text = 'a';
+    const after = observation(['letter A', 'Keep']);
+    after.matchCount = 1;
+    after.matches = [{ text: 'A', font: { ...after.paragraphs[0].font, size: 20, bold: false } }];
+    expect(verifyWordMutation('word_edit', 'edit_selection', { new_text: 'A', font_size: 20, bold: false }, before, after).status).toBe('passed');
+  });
+  it('verifies a cached follow-up target after the live selection collapsed', () => {
+    const before = observation(['A', 'Keep']);
+    before.selection.text = '';
+    const after = observation(['A', 'Keep']);
+    after.selection.text = '';
+    after.matchCount = 1;
+    after.matches = [{ text: 'A', font: { ...after.paragraphs[0].font, size: 20 } }];
+    expect(verifyWordMutation('word_format', 'format_selection', { font_size: 20 }, before, after, 'A').status).toBe('passed');
+  });
   it('checks table dimensions and values, not the mutation output', () => {
     const before = observation();
     const after = observation();
@@ -95,34 +112,41 @@ describe('Word postcondition checks', () => {
 });
 
 describe('Word tool verification integration', () => {
-  it('requires approval and recovery before a protected edit, even with auto-approval enabled', async () => {
+  it('shows a draft before asking Accept/Reject and keeps it only after acceptance', async () => {
     const { execute, callbacks, call } = setup({ previewWordChanges: true });
-    callbacks.beforeWordMutation = vi.fn(async () => {});
-    execute.mockResolvedValueOnce(result(observation())).mockResolvedValueOnce(result(observation()))
-      .mockResolvedValueOnce(result(observation())).mockResolvedValueOnce(result('ok'))
-      .mockResolvedValueOnce(result(observation(['After', 'Keep'])));
+    const draft = { seal: vi.fn(async () => {}), accept: vi.fn(), reject: vi.fn(async () => {}) };
+    callbacks.startWordDraft = vi.fn(async () => draft);
+    execute.mockResolvedValueOnce(result(observation())).mockResolvedValueOnce(result('ok'))
+      .mockResolvedValue(result(observation(['After', 'Keep'])));
+    vi.mocked(callbacks.requestApproval).mockImplementation(async () => {
+      expect(execute.mock.calls.some(([code]) => code.includes('word_edit.edit_selection'))).toBe(true);
+      return true;
+    });
     await call('word_edit', 'edit_selection', { new_text: 'After' });
-    expect(callbacks.requestApproval).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ proposed: 'After' }));
-    expect(callbacks.beforeWordMutation).toHaveBeenCalledOnce();
+    expect(callbacks.requestApproval).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ proposed: 'After', phase: 'applied' }));
+    expect(draft.accept).toHaveBeenCalledOnce();
+    expect(draft.reject).not.toHaveBeenCalled();
     expect(execute.mock.calls.filter(([code]) => !code.includes('verify.read_document'))).toHaveLength(1);
   });
   it('does not edit after rejection, including a later attempt with another editing tool', async () => {
     const { execute, callbacks, call } = setup({ previewWordChanges: true });
+    const reject = vi.fn(async () => {});
+    callbacks.startWordDraft = vi.fn(async () => ({ seal: async () => {}, accept: vi.fn(), reject }));
     vi.mocked(callbacks.requestApproval).mockResolvedValue(false);
     execute.mockResolvedValue(result(observation()));
     await call('word_edit', 'edit_selection', { new_text: 'After' });
     await call('word_format', 'format_selection', { bold: true });
-    expect(execute).toHaveBeenCalledTimes(1);
-    expect(execute.mock.calls[0][0]).toContain('verify.read_document');
+    expect(execute.mock.calls.filter(([code]) => !code.includes('verify.read_document'))).toHaveLength(1);
+    expect(reject).toHaveBeenCalledOnce();
     expect(callbacks.requestApproval).toHaveBeenCalledOnce();
   });
-  it('rejects stale previews and never writes when the recovery copy fails', async () => {
+  it('checks stale pre-approval for operations outside the body and refuses an unavailable draft', async () => {
     const stale = setup({ previewWordChanges: true });
     stale.execute.mockResolvedValueOnce(result(observation())).mockResolvedValueOnce(result(observation(['Manually changed', 'Keep'])));
-    expect(await stale.call('word_edit', 'edit_selection', { new_text: 'After' })).toContain('changed while approval');
+    expect(await stale.call('word_structure', 'set_header_footer', { header_text: 'After' })).toContain('changed while approval');
     expect(stale.execute.mock.calls.every(([code]) => code.includes('verify.read_document'))).toBe(true);
     const broken = setup({ previewWordChanges: true });
-    broken.callbacks.beforeWordMutation = vi.fn(async () => { throw new Error('Backup failed'); });
+    broken.callbacks.startWordDraft = vi.fn(async () => { throw new Error('Draft unavailable'); });
     broken.execute.mockResolvedValue(result(observation()));
     await broken.call('word_edit', 'edit_selection', { new_text: 'After' });
     expect(broken.execute.mock.calls.every(([code]) => code.includes('verify.read_document'))).toBe(true);

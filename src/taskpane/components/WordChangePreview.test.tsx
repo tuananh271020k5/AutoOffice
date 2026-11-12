@@ -3,7 +3,6 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '../i18n';
 import { WordChangePreview } from './WordChangePreview';
-import { WordRecoveryPanel } from './WordRecoveryPanel';
 
 describe('preview and recovery controls', () => {
   it('shows content as plain text and applies only when the user clicks apply', async () => {
@@ -33,11 +32,18 @@ describe('preview and recovery controls', () => {
     expect(onApprove).not.toHaveBeenCalled();
     expect(screen.getByText(/preview is shortened/)).toBeInTheDocument();
   });
-  it('disables recovery while edits are running and explains that it opens a separate document', async () => {
-    render(<LanguageProvider initialLocale="en"><WordRecoveryPanel documentLabel="Test.docx" createdAt={1}
-      preparing={false} opening={false} busy error={false} onOpen={vi.fn()} /></LanguageProvider>);
-    const button = await screen.findByRole('button', { name: 'Open recovery copy' });
-    expect(button).toBeDisabled();
-    expect(screen.getByText(/Opens a separate Word document/)).toBeInTheDocument();
+  it('offers compact Accept/Reject controls for edits already visible in Word', async () => {
+    const accept = vi.fn();
+    const reject = vi.fn();
+    render(<LanguageProvider initialLocale="en"><WordChangePreview preview={{
+      phase: 'applied', kind: 'format', scope: 'selection', before: 'a', proposed: 'A', properties: [], truncated: false,
+    }} onApprove={accept} onReject={reject} /></LanguageProvider>);
+    expect(await screen.findByRole('button', { name: 'Accept' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeVisible();
+    expect(screen.getByText('a')).not.toBeVisible();
+    expect(screen.queryByText('Open recovery copy')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Reject' }));
+    expect(reject).toHaveBeenCalledOnce();
+    expect(accept).not.toHaveBeenCalled();
   });
 });

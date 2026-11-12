@@ -23,9 +23,9 @@ npm run test:word -- suite SESSION_ID
 
 `suite` **xóa nội dung tài liệu thử để tạo dữ liệu cho từng ca** và gọi AI thật,
 có phát sinh token/chi phí theo nhà cung cấp. Bộ thử yêu cầu chế độ tự động duyệt
-đang bật và **Xem trước và giữ bản khôi phục (Word)** đang tắt trong Cài đặt.
+đang bật và **Duyệt chỉnh sửa Word bằng Accept / Reject** đang tắt trong Cài đặt.
 Để kiểm thử luồng xem trước, dùng `npm run test:word -- preview-test SESSION_ID reject`
-hoặc `... accept` rồi bấm quyết định trong Word. Xem [tính năng khôi phục](word-preview-recovery.md).
+hoặc `... accept` rồi bấm quyết định trong Word. Xem [luồng duyệt tại chỗ](word-inline-review-fixes.md).
 Lệnh `run` riêng lẻ vẫn giữ nguyên chế độ duyệt của người
 dùng; nếu cần duyệt, bấm duyệt trong Word. Cầu nối không tự đổi cài đặt này.
 

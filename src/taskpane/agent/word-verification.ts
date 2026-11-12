@@ -1,4 +1,5 @@
 import type { Sandbox } from '../executor/sandbox.ts';
+import { normalizeWordArgs } from './word-formatting';
 
 export interface WordVerification {
   status: 'checking' | 'passed' | 'failed' | 'unverified';
@@ -24,10 +25,12 @@ export interface WordObservation {
   paragraphs: ObservedParagraph[];
   selection: { text: string; font: ObservedFont };
   tables: string[][][];
+  matches?: Array<{ text: string; font: ObservedFont }>;
+  matchCount?: number;
 }
 
 /** Serialized into a fresh Word.run: no cached tool output or selection is trusted. */
-async function observeWord(context: any): Promise<WordObservation> {
+async function observeWord(context: any, query = ''): Promise<WordObservation> {
   const body = context.document.body;
   const selection = context.document.getSelection();
   const paragraphs = body.paragraphs;
@@ -37,6 +40,9 @@ async function observeWord(context: any): Promise<WordObservation> {
   selection.load(`text,${fontProps}`);
   paragraphs.load(`text,alignment,${fontProps}`);
   tables.load('values');
+  const matches = query && query.length <= 255 && !/[\r\n]/.test(query)
+    ? body.search(query, { matchCase: true, matchWildcards: false }) : undefined;
+  if (matches) matches.load(`text,${fontProps}`);
   await context.sync();
   const font = (f: any): ObservedFont => ({
     name: f.name, size: f.size, bold: f.bold, italic: f.italic,
@@ -47,11 +53,12 @@ async function observeWord(context: any): Promise<WordObservation> {
     paragraphs: paragraphs.items.map((p: any) => ({ text: p.text, alignment: p.alignment, font: font(p.font) })),
     selection: { text: selection.text, font: font(selection.font) },
     tables: tables.items.map((t: any) => t.values),
+    ...(matches ? { matchCount: matches.items.length, matches: matches.items.slice(0, 50).map((r: any) => ({ text: r.text, font: font(r.font) })) } : {}),
   };
 }
 
-export async function observeWordDocument(sandbox: Sandbox, timeout: number): Promise<WordObservation> {
-  const script = `// [AutoOffice] verify.read_document\nreturn await (${observeWord.toString()})(context);`;
+export async function observeWordDocument(sandbox: Sandbox, timeout: number, query = ''): Promise<WordObservation> {
+  const script = `// [AutoOffice] verify.read_document\nreturn await (${observeWord.toString()})(context, ${JSON.stringify(query)});`;
   const result = await sandbox.execute(script, timeout);
   if (!result.success) throw new Error(result.error || 'Word read-back failed');
   const data = typeof result.output === 'string' ? JSON.parse(result.output) : result.output;
@@ -95,6 +102,7 @@ export function verifyWordMutation(
   tool: string, op: string, args: Record<string, unknown>,
   before: WordObservation, after: WordObservation, cachedSelection = '',
 ): WordVerification {
+  args = normalizeWordArgs(args);
   if (tool === 'word_edit' && ['edit_selection', 'replace_selection_or_document'].includes(op)) {
     const target = text(String(args.find || before.selection.text || cachedSelection));
     const action = String(args.action || 'replace');
@@ -110,8 +118,10 @@ export function verifyWordMutation(
     const requestedFont = fontKeys.filter(key => args[key] !== undefined);
     if (requestedFont.length && action !== 'delete') {
       const paragraphs = after.paragraphs.filter(p => text(p.text) === replacement);
-      if (paragraphs.length !== 1) return unverified('Text replacement matches, but formatting of the exact replacement range cannot be measured at paragraph level.');
-      if (!fontMatches(paragraphs[0].font, args, requestedFont)) return failed('Replacement text matches, but its requested formatting does not.');
+      const font = paragraphs.length === 1 ? paragraphs[0].font
+        : after.matchCount === 1 && text(after.matches?.[0]?.text ?? '') === replacement ? after.matches![0].font : undefined;
+      if (!font) return unverified('Text replacement matches, but the exact formatted replacement range is ambiguous.');
+      if (!fontMatches(font, args, requestedFont)) return failed('Replacement text matches, but its requested formatting does not.');
       return passed('Replacement text, surrounding text and requested replacement font properties match.');
     }
     return passed('The edited text and surrounding text match the expected replacement.');
@@ -128,22 +138,37 @@ export function verifyWordMutation(
     if (requestedFont.length && !fontMatches(after.paragraphs[index].font, args, requestedFont)) return failed('Paragraph text matches, but its requested formatting does not.');
     return passed('Requested paragraph text matches and surrounding paragraph text is unchanged.');
   }
-  if (tool === 'word_format' && ['format_selection', 'set_paragraph_format'].includes(op)) {
+  if (tool === 'word_edit' && op === 'edit_by_format' && String(args.format || args.target || 'bold') === 'bold') {
+    const action = String(args.action || 'replace');
+    const replacement = String(args.new_text ?? args.text ?? args.replace ?? '');
+    if (action !== 'replace' || !replacement || /[\r\n]/.test(replacement)) return unverified('This format-based operation needs a manual result review.');
+    const indices = before.paragraphs.map((p, i) => p.font.bold === true && p.text.trim() ? i : -1).filter(i => i >= 0);
+    if (!indices.length) return failed('No bold target paragraph was present before the edit.');
+    const expected = before.paragraphs.map((p, i) => indices.includes(i) ? replacement : p.text);
+    if (!same(expected, after.paragraphs.map(p => p.text))) return failed('Format-based replacement changed unexpected text.');
+    if (indices.some(i => after.paragraphs[i].font.bold !== (args.bold === undefined ? false : Boolean(args.bold)))) return failed('The one-use bold marker was not cleared or the requested bold state does not match.');
+    return passed('Bold-marked text was replaced and its one-use marker was cleared unless bold was explicitly requested.');
+  }
+  if (tool === 'word_format' && ['format_selection', 'set_paragraph_format', 'format_text'].includes(op)) {
     if (text(before.text) !== text(after.text)) return failed('Formatting unexpectedly changed document text.');
     const fmt = { ...args, ...((args.formatting as Record<string, unknown>) || {}) };
     const supported = fontKeys;
     const requested = supported.filter(key => fmt[key] !== undefined);
     // Do not certify properties that were not measured, including paragraph layout and styles.
-    const controlKeys = ['indices', 'index', 'paragraph_index', 'formatting'];
+    const controlKeys = ['indices', 'index', 'paragraph_index', 'formatting', 'find', 'query'];
     const unsupported = Object.keys(fmt).filter(key => !supported.includes(key) && !controlKeys.includes(key));
     let fonts: ObservedFont[];
-    if (op === 'format_selection' && before.selection.text) {
-      if (text(after.selection.text) !== text(before.selection.text)) return unverified('The selection moved before it could be checked.');
+    if (op === 'format_selection' && before.selection.text && text(after.selection.text) === text(before.selection.text)) {
       fonts = [after.selection.font];
+    } else if (['format_selection', 'format_text'].includes(op) && after.matches?.length && after.matchCount === after.matches.length &&
+        (op === 'format_text' || after.matchCount === 1)) {
+      fonts = after.matches.map(match => match.font);
     } else if (op === 'set_paragraph_format' && Array.isArray(args.indices) && args.indices.length > 0) {
       const indices = args.indices.map(Number);
       if (indices.some(i => !Number.isInteger(i) || !after.paragraphs[i])) return failed('The requested paragraph index is not present.');
       fonts = indices.map(i => after.paragraphs[i].font);
+    } else if (op === 'format_selection' && !before.selection.text && !cachedSelection && after.paragraphs.length) {
+      fonts = after.paragraphs.map(p => p.font);
     } else return unverified('No stable selected range or explicit paragraph indices were available for formatting verification.');
     if (!requested.length) return unverified('No supported formatting properties were requested.');
     const mismatch = fonts.some(font => !fontMatches(font, fmt, requested));
@@ -182,6 +207,7 @@ function color(value: unknown): string {
 
 export function wordReadBackForModel(observation: WordObservation): string {
   const limit = 12_000;
-  const full = JSON.stringify({ text: observation.text, paragraphs: observation.paragraphs, tables: observation.tables });
+  const full = JSON.stringify({ text: observation.text, paragraphs: observation.paragraphs, tables: observation.tables,
+    matches: observation.matches, matchCount: observation.matchCount });
   return full.length > limit ? `${full.slice(0, limit)}\n[Read-back truncated; use word_read for specific details.]` : full;
 }

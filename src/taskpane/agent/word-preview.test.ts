@@ -15,12 +15,12 @@ describe('human-readable Word previews', () => {
     expect(preview).toMatchObject({ kind: 'replace', scope: 'selection', before: 'Target', proposed: 'New', properties: [{ name: 'bold', value: 'true' }] });
     expect(before.text).toBe('Target\rKeep\r');
   });
-  it('does not label whole-document formatting as cached-selection formatting', () => {
+  it('shows the cached target used by follow-up formatting in the same request', () => {
     const before = state();
     before.selection.text = '';
     const preview = buildWordPreview('word_format', 'format_selection', { bold: true }, before, 'stale cached selection');
-    expect(preview.scope).toBe('document');
-    expect(preview.before).toBe(before.text);
+    expect(preview.scope).toBe('selection');
+    expect(preview.before).toBe('stale cached selection');
   });
   it('warns when long previews or tables are shortened', () => {
     const before = state();

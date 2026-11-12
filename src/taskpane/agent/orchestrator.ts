@@ -14,6 +14,7 @@ import { extractPartialStringField } from './partial-json.ts';
 import { computeCallCost, sumCallCosts, emptyCallCost, type CallCost } from './pricing.ts';
 import type { WordVerification } from './word-verification.ts';
 import type { WordChangePreview } from './word-preview.ts';
+import type { WordDraft } from './word-draft.ts';
 
 export type CodeBlockStatus = 'streaming' | 'pending' | 'rejected' | 'running' | 'success' | 'error';
 
@@ -41,7 +42,7 @@ export interface OrchestratorCallbacks {
     patch: { code?: string; status?: CodeBlockStatus; result?: string; verification?: WordVerification },
   ) => void;
   requestApproval: (code: string, preview?: WordChangePreview) => Promise<boolean>;
-  beforeWordMutation?: () => Promise<void>;
+  startWordDraft?: () => Promise<WordDraft>;
   onTurnCost?: (cost: CallCost) => void;
 }
 

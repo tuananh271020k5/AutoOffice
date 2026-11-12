@@ -19,7 +19,7 @@ export interface AppSettings {
   selectedModel: string;
   providers: ProviderConfig[];
   autoApprove: boolean;
-  /** Word writes always show a preview and keep a recovery copy when enabled. */
+  /** Supported Word body edits wait for inline Accept/Reject when enabled. */
   previewWordChanges?: boolean;
   mcpServers: McpServerConfig[];
   maxRetries: number;

@@ -396,29 +396,7 @@ export function ChatPanel({
   // and clicks into the chat input box, AutoOffice keeps & displays their selection!
   useEffect(() => {
     if (host.kind !== 'word') return;
-    initWordSelectionTracker((txt) => {
-      if (txt) setSelectedWordText(txt);
-    });
-
-    const interval = setInterval(() => {
-      try {
-        if (typeof Word === 'undefined' || !Word.run) return;
-        void Word.run(async (context) => {
-          const sel = context.document.getSelection();
-          sel.load('text');
-          await context.sync();
-          const raw = (sel.text || '').replace(/\r/g, ' ').trim();
-          if (raw) {
-            setCachedWordSelection(raw);
-            setSelectedWordText(raw);
-          }
-        }).catch(() => {});
-      } catch {
-        // Ignore outside Word runtime
-      }
-    }, 1200);
-
-    return () => clearInterval(interval);
+    return initWordSelectionTracker(setSelectedWordText);
   }, [host.kind]);
 
   useEffect(() => {

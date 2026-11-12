@@ -3,6 +3,8 @@ import type { Sandbox } from '../executor/sandbox.ts';
 import type { AppSettings } from '../store/settings.ts';
 import type { OrchestratorCallbacks } from './orchestrator.ts';
 import { formatError } from './errors.ts';
+import { normalizeWordArgs } from './word-formatting.ts';
+import { beginWordDraft, supportsInlineDraft, type WordDraft } from './word-draft.ts';
 import { buildWordPreview, sameApprovalState, pinWordSelection, selectPinnedRange, releasePinnedRange } from './word-preview.ts';
 import {
   isWordMutation, observeWordDocument, verifyWordMutation, wordReadBackForModel,
@@ -26,34 +28,36 @@ export interface Ks4wToolMeta {
 // know the exact text they had selected ("bôi đen / bôi xanh").
 let cachedSelectionText = '';
 let selectionListenersAtached = false;
+let selectionEpoch = 0;
+const selectionListeners = new Set<(text: string) => void>();
 
 export function getCachedWordSelection(): string {
   return cachedSelectionText;
 }
 
 export function setCachedWordSelection(text: string): void {
+  if (!text.trim()) selectionEpoch++;
   cachedSelectionText = text.trim();
+  for (const listener of selectionListeners) listener(cachedSelectionText);
 }
 
-export function initWordSelectionTracker(onSelectionChange?: (text: string) => void): void {
-  if (typeof Office === 'undefined' || !Office.context?.document?.addHandlerAsync) return;
-  if (selectionListenersAtached) return;
+export function initWordSelectionTracker(onSelectionChange?: (text: string) => void): () => void {
+  if (onSelectionChange) selectionListeners.add(onSelectionChange);
+  const unsubscribe = () => { if (onSelectionChange) selectionListeners.delete(onSelectionChange); };
+  if (typeof Office === 'undefined' || !Office.context?.document?.addHandlerAsync) return unsubscribe;
+  if (selectionListenersAtached) return unsubscribe;
   selectionListenersAtached = true;
 
   const readCurrentSelection = () => {
     try {
       if (typeof Word === 'undefined' || !Word.run) return;
+      const epoch = selectionEpoch;
       void Word.run(async (context) => {
         const sel = context.document.getSelection();
         sel.load('text');
         await context.sync();
         const raw = (sel.text || '').replace(/\r/g, '\n').trim();
-        if (raw) {
-          cachedSelectionText = raw;
-          onSelectionChange?.(raw);
-        } else {
-          onSelectionChange?.('');
-        }
+        if (raw && epoch === selectionEpoch) setCachedWordSelection(raw);
       }).catch(() => {});
     } catch {
       // Ignore outside Word runtime
@@ -73,6 +77,17 @@ export function initWordSelectionTracker(onSelectionChange?: (text: string) => v
   } catch {
     // Ignore if host doesn't support DocumentSelectionChanged
   }
+  return unsubscribe;
+}
+
+export async function consumeWordSelection(): Promise<void> {
+  setCachedWordSelection('');
+  if (typeof Word === 'undefined') return;
+  try { await Word.run(async context => {
+    context.document.getSelection().getRange(Word.RangeLocation.end).select();
+    await context.sync();
+  }); } catch { /* The pane/document can close after a decision; still discard the cached target. */ }
+  setCachedWordSelection('');
 }
 
 export const KITCHENSINK_WORD_TOOLS_META: Ks4wToolMeta[] = [
@@ -205,6 +220,15 @@ async function executeKs4wInWord(
   const { toolName, op, cachedSelection = '' } = payload;
   const args: Record<string, unknown> = payload.args || {};
   const body = context.document.body;
+  const applyFont = (range: any, fmt: Record<string, unknown>) => {
+    if (fmt.font_name !== undefined) range.font.name = String(fmt.font_name);
+    if (fmt.font_size !== undefined) range.font.size = Number(fmt.font_size);
+    if (fmt.bold !== undefined) range.font.bold = Boolean(fmt.bold);
+    if (fmt.italic !== undefined) range.font.italic = Boolean(fmt.italic);
+    if (fmt.underline !== undefined) range.font.underline = fmt.underline ? Word.UnderlineType.single : Word.UnderlineType.none;
+    if (fmt.color !== undefined) range.font.color = String(fmt.color);
+    if (fmt.highlight_color !== undefined) range.font.highlightColor = fmt.highlight_color || null;
+  };
 
   const toAlign = (val: unknown, fallback = Word.Alignment.left) => {
     const s = String(val || '').toLowerCase().trim();
@@ -316,13 +340,14 @@ async function executeKs4wInWord(
     fmt: Record<string, unknown>,
     defaultFontName = 'Times New Roman',
     defaultFontSize = 13,
+    defaults = true,
   ) => {
-    p.font.name = String(fmt.font_name || fmt.fontName || defaultFontName);
-    p.font.size = Number(fmt.font_size || fmt.fontSize || defaultFontSize);
+    if (defaults || fmt.font_name || fmt.fontName) p.font.name = String(fmt.font_name || fmt.fontName || defaultFontName);
+    if (defaults || fmt.font_size || fmt.fontSize) p.font.size = Number(fmt.font_size || fmt.fontSize || defaultFontSize);
     if (fmt.bold !== undefined) p.font.bold = Boolean(fmt.bold);
     if (fmt.italic !== undefined) p.font.italic = Boolean(fmt.italic);
     // Always set underline explicitly so Word never leaks underline from "Độc lập - Tự do - Hạnh phúc"
-    p.font.underline = fmt.underline ? Word.UnderlineType.single : Word.UnderlineType.none;
+    if (defaults || fmt.underline !== undefined) p.font.underline = fmt.underline ? Word.UnderlineType.single : Word.UnderlineType.none;
     if (fmt.color) p.font.color = String(fmt.color);
     if (fmt.highlight_color !== undefined || fmt.highlightColor !== undefined) {
       const hc = fmt.highlight_color ?? fmt.highlightColor;
@@ -331,8 +356,8 @@ async function executeKs4wInWord(
     if (fmt.alignment) p.alignment = toAlign(fmt.alignment);
     const spAfter = fmt.space_after ?? fmt.spaceAfter;
     const spBefore = fmt.space_before ?? fmt.spaceBefore;
-    p.spaceAfter = spAfter !== undefined ? Number(spAfter) : 6;
-    p.spaceBefore = spBefore !== undefined ? Number(spBefore) : 0;
+    if (defaults || spAfter !== undefined) p.spaceAfter = spAfter !== undefined ? Number(spAfter) : 6;
+    if (defaults || spBefore !== undefined) p.spaceBefore = spBefore !== undefined ? Number(spBefore) : 0;
     const lineSpLines = fmt.line_spacing_lines ?? fmt.lineSpacingLines;
     const lineSpPt = fmt.line_spacing_pt ?? fmt.lineSpacing;
     if (lineSpLines !== undefined) {
@@ -340,7 +365,7 @@ async function executeKs4wInWord(
     } else if (lineSpPt !== undefined) {
       const n = Number(lineSpPt);
       p.lineSpacing = n <= 4 ? n * 12 : n;
-    } else {
+    } else if (defaults) {
       p.lineSpacing = 15.6;
     }
     if (fmt.first_line_indent_pt !== undefined) {
@@ -643,6 +668,8 @@ async function executeKs4wInWord(
           sel.delete();
         } else {
           const r = sel.insertText(newText, Word.InsertLocation.replace);
+          applyFont(r, args);
+          if (args.bold === undefined && newText !== liveSel) r.font.bold = false;
           if (args.bold !== undefined) r.font.bold = Boolean(args.bold);
           if (args.italic !== undefined) r.font.italic = Boolean(args.italic);
           if (args.underline !== undefined) {
@@ -669,7 +696,9 @@ async function executeKs4wInWord(
             if (action === 'delete' && !repRes.text.trim()) {
               p.delete();
             } else {
-              p.insertText(repRes.text, Word.InsertLocation.replace);
+              const changed = p.insertText(repRes.text, Word.InsertLocation.replace);
+              applyFont(changed, args);
+              if (args.bold === undefined && repRes.text !== pText) changed.font.bold = false;
               if (args.bold !== undefined) p.font.bold = Boolean(args.bold);
               if (args.underline !== undefined) {
                 p.font.underline = args.underline ? Word.UnderlineType.single : Word.UnderlineType.none;
@@ -766,7 +795,10 @@ async function executeKs4wInWord(
             p.font.underline = Word.UnderlineType.none;
             p.font.highlightColor = null;
           } else if (newText) {
-            p.insertText(newText, Word.InsertLocation.replace);
+            const changed = p.insertText(newText, Word.InsertLocation.replace);
+            applyFont(changed, args);
+            // Bold used to locate a paragraph is consumed once after a replacement.
+            if (args.bold === undefined && (matchFormat === 'bold' || matchFormat.includes('đậm'))) changed.font.bold = false;
           }
           if (args.bold !== undefined) p.font.bold = Boolean(args.bold);
           if (args.underline !== undefined) {
@@ -803,9 +835,12 @@ async function executeKs4wInWord(
         return JSON.stringify({ error: `Paragraph index ${idx} out of range (0..${allParas.length - 1})` });
       }
       const target = allParas[idx];
-      target.insertText(newText, Word.InsertLocation.replace);
+      const previous = target.text;
+      const changed = target.insertText(newText, Word.InsertLocation.replace);
+      applyFont(changed, args);
+      if (args.bold === undefined && previous !== newText) changed.font.bold = false;
       if (args.bold !== undefined || args.alignment !== undefined || args.font_size !== undefined || args.underline !== undefined) {
-        applyParagraphFormatting(target, args);
+        applyParagraphFormatting(target, args, 'Times New Roman', 13, false);
       }
       await context.sync();
       return JSON.stringify({ status: 'ok', updatedParagraph: idx, newText });
@@ -854,6 +889,8 @@ async function executeKs4wInWord(
             const repSel = flexibleReplace(liveSel, findText, replaceText);
             const finalSelText = repSel.changed ? repSel.text : replaceText;
             const r = sel.insertText(finalSelText, Word.InsertLocation.replace);
+            applyFont(r, rep);
+            if (rep.bold === undefined && finalSelText !== liveSel) r.font.bold = false;
             if (rep.bold !== undefined) r.font.bold = Boolean(rep.bold);
             if (rep.italic !== undefined) r.font.italic = Boolean(rep.italic);
             if (rep.underline !== undefined) {
@@ -882,6 +919,7 @@ async function executeKs4wInWord(
               }
             }
             if (rep.bold !== undefined) p.font.bold = Boolean(rep.bold);
+            applyFont(p, rep);
             if (rep.italic !== undefined) p.font.italic = Boolean(rep.italic);
             if (rep.underline !== undefined) {
               p.font.underline = rep.underline ? Word.UnderlineType.single : Word.UnderlineType.none;
@@ -1118,6 +1156,15 @@ async function executeKs4wInWord(
           await context.sync();
           return JSON.stringify({ status: 'ok', formattedTarget: 'live_selection', selectedText: liveSel });
         }
+        if (op === 'format_selection' && cachedSelection) {
+          const matches = body.search(cachedSelection, { matchCase: true, matchWildcards: false });
+          matches.load('items');
+          await context.sync();
+          if (matches.items.length !== 1) throw new Error('The saved selection is no longer unique. Select the intended text again.');
+          applyFont(matches.items[0], fmt);
+          await context.sync();
+          return JSON.stringify({ status: 'ok', formattedTarget: 'cached_selection', selectedText: cachedSelection });
+        }
       }
 
       const targets = indices.length > 0
@@ -1125,7 +1172,7 @@ async function executeKs4wInWord(
         : paras.items;
 
       for (const p of targets) {
-        applyParagraphFormatting(p, fmt);
+        applyParagraphFormatting(p, fmt, 'Times New Roman', 13, false);
       }
       await context.sync();
       return JSON.stringify({ status: 'ok', updatedCount: targets.length });
@@ -1139,6 +1186,7 @@ async function executeKs4wInWord(
       };
       if (!findText) {
         const sel = context.document.getSelection();
+        applyFont(sel, fmt);
         if (fmt.bold !== undefined) sel.font.bold = Boolean(fmt.bold);
         if (fmt.italic !== undefined) sel.font.italic = Boolean(fmt.italic);
         if (fmt.underline !== undefined) {
@@ -1174,7 +1222,7 @@ async function executeKs4wInWord(
         await context.sync();
         for (const p of paras.items) {
           if (flexibleIncludes(p.text || '', findText)) {
-            applyParagraphFormatting(p, fmt);
+            applyParagraphFormatting(p, fmt, 'Times New Roman', 13, false);
             formattedCount++;
           }
         }
@@ -1687,6 +1735,7 @@ async function executeKs4wInWord(
  * Generates clean, deterministic Office.js code for each KitchenSink4Word tool operation.
  */
 export function buildKs4wScript(toolName: string, op: string, args: Record<string, unknown> = {}): string {
+  args = normalizeWordArgs(args);
   const payload = JSON.stringify({
     toolName,
     op,
@@ -1764,13 +1813,17 @@ export function makeKitchenSinkWordTools(
         additionalProperties: false,
       }),
       execute: async ({ op, args = {} }, { toolCallId }) => sequential(async () => {
+        args = normalizeWordArgs(args);
         const code = buildKs4wScript(meta.name, op, args);
         let pinnedSelection: Word.Range | undefined;
+        let draft: WordDraft | undefined;
+        let draftDecided = false;
         try {
           const mutation = isWordMutation(meta.name, op, args);
           if (mutation && writeRejected) return 'No operation executed. The user rejected edits in this turn; stop editing until a new user request.';
           const protectedWrite = mutation && settings.previewWordChanges !== false;
-          const needsApproval = mutation && (protectedWrite || !settings.autoApprove);
+          const inline = protectedWrite && supportsInlineDraft(meta.name, op);
+          const needsApproval = mutation && !inline && (protectedWrite || !settings.autoApprove);
           const selectionBefore = getCachedWordSelection();
           let before: WordObservation | undefined;
           if (mutation) {
@@ -1804,24 +1857,16 @@ export function makeKitchenSinkWordTools(
               return 'The document or selection changed while approval was pending. Nothing was executed. Read the current document and request approval for a fresh preview before editing.';
             }
           }
-          if (protectedWrite) {
-            if (!callbacks.beforeWordMutation) throw new Error('Document recovery is not available; the protected operation was not executed.');
-            await callbacks.beforeWordMutation();
-            // The asynchronous full-document backup may take time. Check again before writing.
-            let current = await observeWordDocument(sandbox, settings.executionTimeout);
-            if (pinnedSelection && (!current.selection.text || current.selection.text === before!.selection.text)) {
-              await selectPinnedRange(pinnedSelection);
-              setCachedWordSelection(before!.selection.text);
-              current = await observeWordDocument(sandbox, settings.executionTimeout);
-            }
-            if (!sameApprovalState(before!, current, selectionBefore, pinnedSelection ? selectionBefore : getCachedWordSelection())) {
-              callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'rejected' });
-              return 'The document changed while creating its recovery copy. Nothing was executed. Read it again and request approval for an updated preview.';
-            }
-          }
+          if (inline) draft = await (callbacks.startWordDraft ?? beginWordDraft)();
 
           callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'running' });
           const result = await sandbox.execute(code, settings.executionTimeout);
+          if (draft) await draft.seal();
+          if (!result.success && draft) {
+            await draft.reject();
+            draftDecided = true;
+            await consumeWordSelection();
+          }
 
           if (result.success) {
             const outputText = typeof result.output === 'string'
@@ -1834,7 +1879,9 @@ export function makeKitchenSinkWordTools(
               let verification: WordVerification;
               let readBack = '';
               try {
-                const after = await observeWordDocument(sandbox, settings.executionTimeout);
+                const query = meta.name === 'word_edit' ? String(args.new_text ?? args.text ?? args.replace ?? '')
+                  : String(args.find || args.query || before?.selection.text || selectionBefore);
+                const after = await observeWordDocument(sandbox, settings.executionTimeout, query);
                 readBack = wordReadBackForModel(after);
                 verification = before
                   ? verifyWordMutation(meta.name, op, args, before, after, selectionBefore)
@@ -1842,15 +1889,41 @@ export function makeKitchenSinkWordTools(
               } catch (error) {
                 verification = { status: 'unverified', detail: `The operation ran, but document read-back failed: ${error instanceof Error ? error.message : String(error)}` };
               }
-              const evidence = JSON.stringify({ operationOutput: outputText, verification, readBack,
+              const evidence = () => JSON.stringify({ operationOutput: outputText, verification, readBack,
                 instruction: verification.status === 'passed'
                   ? 'These measured postconditions passed. Compare the observed result against the user request before reporting completion; this is not proof of every aspect of the request.'
                   : 'Do not claim verified completion. The operation may already have modified the document. Explain the uncertainty or mismatch, inspect the current document, and do not blindly repeat the operation.' });
+              if (draft) {
+                callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'pending', verification: undefined });
+                const accepted = await callbacks.requestApproval(code, {
+                  ...buildWordPreview(meta.name, op, args, before!, selectionBefore), phase: 'applied',
+                });
+                if (!accepted) {
+                  writeRejected = true;
+                  await draft.reject();
+                  draftDecided = true;
+                  await consumeWordSelection();
+                  callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'rejected', verification: undefined });
+                  return 'User rejected the visible AI edit. The previous document body was restored in the same Word document. Stop editing for this turn.';
+                }
+                draft.accept();
+                draftDecided = true;
+                const query = meta.name === 'word_edit' ? String(args.new_text ?? args.text ?? args.replace ?? '')
+                  : String(args.find || args.query || before?.selection.text || selectionBefore);
+                const confirmed = await observeWordDocument(sandbox, settings.executionTimeout, query);
+                readBack = wordReadBackForModel(confirmed);
+                verification = verifyWordMutation(meta.name, op, args, before!, confirmed, selectionBefore);
+              }
+              // Preserve the updated target between tools of this SAME request (e.g.
+              // replace text, then set its font size). The UI clears it when the turn ends.
+              if (meta.name === 'word_edit' && ['edit_selection', 'replace_selection_or_document', 'set_paragraph_text'].includes(op)) {
+                setCachedWordSelection(String(args.new_text ?? args.text ?? args.replace ?? ''));
+              }
               callbacks.onUpsertCodeBlock(toolCallId, {
                 code, status: verification.status === 'failed' ? 'error' : 'success',
-                result: evidence, verification,
+                result: evidence(), verification,
               });
-              return evidence;
+              return evidence();
             }
             callbacks.onUpsertCodeBlock(toolCallId, {
               code,
@@ -1864,6 +1937,9 @@ export function makeKitchenSinkWordTools(
           callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'error', result: uiResult });
           return `Operation ${meta.name}.${op} failed: ${result.error}`;
         } catch (err) {
+          if (draft && !draftDecided) {
+            try { await draft.reject(); } catch { /* Conflicts must preserve newer user edits. */ }
+          }
           const formatted = formatError(err, { phase: 'tool-execute', tool: meta.name });
           callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'error', result: formatted.detail });
           callbacks.onMessage({ role: 'assistant', content: '', error: formatted });

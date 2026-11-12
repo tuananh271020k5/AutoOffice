@@ -1,5 +1,9 @@
 # Tính năng 2: xem trước và mở bản khôi phục
 
+> Luồng mở bản khôi phục riêng trong tài liệu này đã được thay bằng
+> [Accept / Reject ngay trong Word](word-inline-review-fixes.md). Phần dưới lưu lại
+> thiết kế cũ để tham khảo lịch sử, không mô tả giao diện hiện tại.
+
 Trong Cài đặt có **Xem trước và giữ bản khôi phục (Word)**, bật mặc định kể cả
 với cấu hình cũ. Khi bật, chỉnh sửa bằng công cụ Word tích hợp luôn chờ người dùng
 duyệt, dù **Tự động thực thi chỉnh sửa** đang bật. Công cụ chỉ đọc không hỏi duyệt.

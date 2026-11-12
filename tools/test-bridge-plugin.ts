@@ -165,6 +165,9 @@ export function localTestBridgePlugin(): Plugin {
       server.httpServer?.once('listening', () => {
         const address = server.httpServer!.address();
         if (!address || typeof address === 'string') return;
+        // The Office manifest targets the configured port. A duplicate Vite process
+        // must not replace discovery credentials with those of an unused fallback port.
+        if (address.port !== server.config.server.port) return;
         const baseUrl = `${server.config.server.https ? 'https' : 'http'}://localhost:${address.port}`;
         handler = createTestBroker(token, baseUrl);
         fs.mkdirSync(path.dirname(connectionFile), { recursive: true });

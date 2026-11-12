@@ -25,8 +25,10 @@ export function WordChangePreview({ preview, onApprove, onReject }: {
   return (
     <section aria-label={t('preview.title')} style={{ fontSize: 12 }}>
       <Text weight="semibold">{t('preview.title')}: {t(kinds[preview.kind])}</Text>
+      <p>{t(preview.phase === 'applied' ? 'preview.appliedNotice' : 'preview.planNotice')}</p>
+      <details>
+      <summary>{t('preview.details')}</summary>
       <p>{t(scopes[preview.scope])}</p>
-      <p>{t('preview.planNotice')}</p>
       <strong>{t('preview.before')}</strong>
       <div style={box}>{preview.before || t('preview.empty')}</div>
       {preview.proposed !== undefined && <>
@@ -49,9 +51,10 @@ export function WordChangePreview({ preview, onApprove, onReject }: {
       </div>}
       {preview.kind === 'other' && <p>{t('preview.otherNotice')}</p>}
       {preview.truncated && <p role="note">{t('preview.truncated')}</p>}
+      </details>
       <div style={{ display: 'flex', gap: 8, paddingTop: 6 }}>
-        <Button size="small" appearance="primary" onClick={onApprove}>{t('preview.apply')}</Button>
-        <Button size="small" onClick={onReject}>{t('preview.reject')}</Button>
+        <Button size="small" appearance="primary" onClick={onApprove}>{preview.phase === 'applied' ? 'Accept' : t('preview.apply')}</Button>
+        <Button size="small" onClick={onReject}>{preview.phase === 'applied' ? 'Reject' : t('preview.reject')}</Button>
       </div>
     </section>
   );

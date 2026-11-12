@@ -1,6 +1,7 @@
 import type { WordObservation } from './word-verification';
 
 export interface WordChangePreview {
+  phase?: 'proposed' | 'applied';
   kind: 'replace' | 'delete' | 'insert' | 'format' | 'table' | 'other';
   scope: 'selection' | 'paragraphs' | 'document';
   before: string;
@@ -26,7 +27,7 @@ export function buildWordPreview(tool: string, op: string, args: Record<string, 
   };
   const indices = Array.isArray(args.indices) ? args.indices.map(Number)
     : args.paragraph_index !== undefined || args.index !== undefined ? [Number(args.paragraph_index ?? args.index)] : [];
-  const selected = op === 'format_selection' ? before.selection.text : String(args.find || before.selection.text || cached);
+  const selected = op === 'format_selection' ? before.selection.text || cached : String(args.find || before.selection.text || cached);
   if (op === 'edit_selection' || op === 'replace_selection_or_document' || op === 'format_selection') {
     // The executor can fall back to the document when no selection exists. Make that scope visible.
     preview.scope = selected ? 'selection' : 'document';

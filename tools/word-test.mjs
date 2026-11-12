@@ -64,6 +64,42 @@ async function main() {
     console.log(JSON.stringify(await request(`/commands/${encodeURIComponent(sessionId)}`), null, 2)); return;
   }
   if (!sessionId) throw new Error('Usage: npm run test:word -- sessions | status|snapshot|suite <sessionId> | run|select <sessionId> <text> | fixture <sessionId> <JSON array> | result <commandId>');
+  if (action === 'font-test') {
+    const mode = rest[0];
+    if (!['accept', 'reject', 'format', 'format-reject'].includes(mode)) throw new Error('font-test requires accept, reject, format or format-reject.');
+    const formattingOnly = mode.startsWith('format');
+    const rejecting = mode.endsWith('reject');
+    await execute(sessionId, 'fixture', { paragraphs: ['a', 'KEEP'], boldFirst: !formattingOnly });
+    await execute(sessionId, 'select', { text: 'a' });
+    console.error(`Inspect the visible Word edit, then ${rejecting ? 'Reject' : 'Accept'} in the task pane.`);
+    const result = await execute(sessionId, 'run', {
+      prompt: formattingOnly
+        ? 'Chỉ đổi cỡ chữ vùng đang chọn lên 20 pt và in đậm. Không thay chữ, không đổi phông chữ và không sửa phần khác.'
+        : 'Trong một thao tác, sửa đúng chữ đang chọn từ a thành A, cỡ chữ 20 pt, bỏ in đậm sau khi sửa. Không đổi phông chữ, không sửa phần khác. Nếu tôi Reject thì dừng.',
+    });
+    const status = await execute(sessionId, 'status');
+    const first = result.after.paragraphs[0];
+    const expectedText = rejecting || formattingOnly ? 'a' : 'A';
+    const expectedSize = rejecting ? 11 : 20;
+    const expectedBold = formattingOnly ? !rejecting : mode !== 'accept';
+    const assertions = {
+      text: first.text === expectedText, size: first.font.size === expectedSize,
+      bold: first.font.bold === expectedBold, fontPreserved: first.font.name === 'Calibri',
+      surroundingUnchanged: result.after.paragraphs[1].text === 'KEEP' && result.after.paragraphs[1].font.size === 11,
+      selectionCleared: result.after.selectedText === '' && status.cachedSelectionLength === 0,
+      noExecutionError: !result.turn.errors.length && !result.turn.toolResults.some(tool => tool.status === 'error'),
+      verificationOk: result.turn.toolResults.every(tool => {
+        try { const verification = JSON.parse(tool.result).verification; return !verification || verification.status === 'passed'; }
+        catch { return true; }
+      }),
+    };
+    const passed = Object.values(assertions).every(Boolean);
+    const reportFile = path.join(outputDir, `font-${mode}.json`);
+    fs.writeFileSync(reportFile, JSON.stringify({ mode, passed, assertions, result }, null, 2));
+    console.log(JSON.stringify({ mode, passed, assertions, reportFile }, null, 2));
+    if (!passed) process.exitCode = 1;
+    return;
+  }
   if (action === 'preview-test') {
     const decision = rest[0];
     if (!['accept', 'reject'].includes(decision)) throw new Error('preview-test requires accept or reject.');

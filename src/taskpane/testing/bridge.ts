@@ -66,11 +66,11 @@ export async function executeTestCommand(command: TestCommand, access: TestBridg
     await Word.run(async context => {
       const body = context.document.body;
       body.clear();
-      for (const text of paragraphs) {
+      for (const [index, text] of paragraphs.entries()) {
         const p = body.insertParagraph(text, Word.InsertLocation.end);
         p.font.name = 'Calibri';
         p.font.size = 11;
-        p.font.bold = false;
+        p.font.bold = index === 0 && command.args.boldFirst === true;
         p.font.italic = false;
         p.font.underline = Word.UnderlineType.none;
         p.alignment = Word.Alignment.left;
