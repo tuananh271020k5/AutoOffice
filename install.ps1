@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Cài đặt AutoOffice Add-in cho Microsoft Word, Excel và PowerPoint thông qua Trusted Catalog.
 .DESCRIPTION
@@ -53,7 +53,7 @@ $ManifestDest = Join-Path $LocalPath "manifest.xml"
 if (Test-Path $ManifestSource) {
     Copy-Item -Path $ManifestSource -Destination $ManifestDest -Force
 } else {
-    $ManifestUrl = "https://raw.githubusercontent.com/anhkkk5/AutoOffice/master/manifest.production.xml"
+    $ManifestUrl = "https://raw.githubusercontent.com/tuananh271020k5/AutoOffice/master/manifest.production.xml"
     Write-Host "     Dang tai manifest tu: $ManifestUrl" -ForegroundColor Yellow
     Invoke-WebRequest -Uri $ManifestUrl -OutFile $ManifestDest -UseBasicParsing
 }

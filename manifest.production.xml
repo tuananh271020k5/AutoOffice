@@ -14,7 +14,7 @@
   <Description DefaultValue="Trợ lý AI thông minh cho Microsoft Word, Excel và PowerPoint" />
   <IconUrl DefaultValue="https://auto-office-ten.vercel.app/assets/icon-32.png" />
   <HighResolutionIconUrl DefaultValue="https://auto-office-ten.vercel.app/assets/icon-64.png" />
-  <SupportUrl DefaultValue="https://github.com/anhkkk5/AutoOffice" />
+  <SupportUrl DefaultValue="https://github.com/tuananh271020k5/AutoOffice" />
 
   <Hosts>
     <Host Name="Document" />
@@ -151,7 +151,7 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="Taskpane.Url" DefaultValue="https://auto-office-ten.vercel.app/" />
-        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://github.com/anhkkk5/AutoOffice" />
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://github.com/tuananh271020k5/AutoOffice" />
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="AutoOffice đã sẵn sàng" />
