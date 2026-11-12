@@ -47,9 +47,10 @@ describe('LanguageProvider + hooks', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('locale').textContent).toBe('he');
+      // HTML attributes are applied in a React effect after the locale render.
+      expect(document.documentElement.getAttribute('lang')).toBe('he');
+      expect(document.documentElement.getAttribute('dir')).toBe('rtl');
     });
     expect(screen.getByTestId('dir').textContent).toBe('rtl');
-    expect(document.documentElement.getAttribute('lang')).toBe('he');
-    expect(document.documentElement.getAttribute('dir')).toBe('rtl');
   });
 });

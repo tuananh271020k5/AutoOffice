@@ -12,6 +12,7 @@ import { getMcpTools } from '../mcp/client.ts';
 import { formatError, type FormattedError } from './errors.ts';
 import { extractPartialStringField } from './partial-json.ts';
 import { computeCallCost, sumCallCosts, emptyCallCost, type CallCost } from './pricing.ts';
+import type { WordVerification } from './word-verification.ts';
 
 export type CodeBlockStatus = 'streaming' | 'pending' | 'rejected' | 'running' | 'success' | 'error';
 
@@ -23,6 +24,7 @@ export interface ChatMessage {
     code: string;
     status: CodeBlockStatus;
     result?: string;
+    verification?: WordVerification;
   };
   toolActivity?: {
     toolName: string;
@@ -35,7 +37,7 @@ export interface OrchestratorCallbacks {
   onStreamToken: (token: string) => void;
   onUpsertCodeBlock: (
     toolCallId: string,
-    patch: { code?: string; status?: CodeBlockStatus; result?: string },
+    patch: { code?: string; status?: CodeBlockStatus; result?: string; verification?: WordVerification },
   ) => void;
   requestApproval: (code: string) => Promise<boolean>;
   onTurnCost?: (cost: CallCost) => void;

@@ -5,8 +5,10 @@ import {
   DismissCircle16Filled,
   DismissCircle24Regular,
   Play24Regular,
+  Warning16Regular,
 } from '@fluentui/react-icons';
 import { useTranslation } from '../i18n/index.ts';
+import type { WordVerification } from '../agent/word-verification.ts';
 
 const useStyles = makeStyles({
   compactRow: {
@@ -97,6 +99,7 @@ interface CodeBlockProps {
   result?: string;
   onApprove?: () => void;
   onReject?: () => void;
+  verification?: WordVerification;
 }
 
 const FRIENDLY_ACTION_LABELS_VI: Record<string, string> = {
@@ -161,7 +164,7 @@ function getFriendlyActionLabel(rawCode: string, isVi: boolean): string {
   return isVi ? 'Thực hiện thao tác trên tài liệu' : 'Executing document action';
 }
 
-export function CodeBlock({ code, status, result, onApprove, onReject }: CodeBlockProps) {
+export function CodeBlock({ code, status, result, onApprove, onReject, verification }: CodeBlockProps) {
   const styles = useStyles();
   const { t, locale } = useTranslation();
   const isVi = locale === 'vi';
@@ -176,8 +179,14 @@ export function CodeBlock({ code, status, result, onApprove, onReject }: CodeBlo
   } as const;
 
   const friendlyLabel = useMemo(() => getFriendlyActionLabel(code, isVi), [code, isVi]);
+  const uncertain = verification?.status === 'unverified' || verification?.status === 'failed';
+  const verificationLabels = {
+    checking: t('code.verificationChecking'), passed: t('code.verificationPassed'),
+    failed: t('code.verificationFailed'), unverified: t('code.verificationUnverified'),
+  };
 
   const statusPillClass =
+    uncertain ? styles.statusWarning :
     status === 'success' ? styles.statusSuccess :
     status === 'error' ? styles.statusDanger :
     status === 'rejected' ? styles.statusWarning :
@@ -190,6 +199,8 @@ export function CodeBlock({ code, status, result, onApprove, onReject }: CodeBlo
       <div className={styles.leftGroup}>
         {isRunning ? (
           <Spinner size="extra-tiny" />
+        ) : uncertain ? (
+          <Warning16Regular />
         ) : status === 'error' ? (
           <DismissCircle16Filled className={styles.iconError} />
         ) : (
@@ -199,7 +210,7 @@ export function CodeBlock({ code, status, result, onApprove, onReject }: CodeBlo
       </div>
 
       <span className={`${styles.statusPill} ${statusPillClass}`}>
-        {STATUS_LABELS[status]}
+        {verification ? verificationLabels[verification.status] : STATUS_LABELS[status]}
       </span>
 
       {status === 'pending' && onApprove && onReject && (
@@ -213,7 +224,12 @@ export function CodeBlock({ code, status, result, onApprove, onReject }: CodeBlo
         </div>
       )}
 
-      {status === 'error' && result && (
+      {uncertain && (
+        <div style={{ width: '100%', fontSize: 11.5 }}>
+          {t('code.verificationNotice')}
+        </div>
+      )}
+      {status === 'error' && result && !uncertain && (
         <div className={styles.errorText}>
           {isVi
             ? 'Không thể thực hiện thao tác này trên tài liệu. Vui lòng thử lại.'

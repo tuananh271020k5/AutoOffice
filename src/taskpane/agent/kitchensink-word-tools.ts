@@ -3,6 +3,10 @@ import type { Sandbox } from '../executor/sandbox.ts';
 import type { AppSettings } from '../store/settings.ts';
 import type { OrchestratorCallbacks } from './orchestrator.ts';
 import { formatError } from './errors.ts';
+import {
+  isWordMutation, observeWordDocument, verifyWordMutation, wordReadBackForModel,
+  type WordObservation, type WordVerification,
+} from './word-verification.ts';
 
 export interface Ks4wToolMeta {
   name: string;
@@ -1621,6 +1625,8 @@ async function executeKs4wInWord(
       if (typeof context.document.save === 'function') {
         context.document.save();
         await context.sync();
+      } else {
+        throw new Error('Saving is not supported by this Word runtime. The document has not been confirmed saved.');
       }
       return JSON.stringify({ status: 'ok', saved: true });
     }
@@ -1726,6 +1732,14 @@ export function makeKitchenSinkWordTools(
   callbacks: OrchestratorCallbacks,
 ): Record<string, Tool> {
   const tools: Record<string, Tool> = {};
+  // The SDK may request several tools concurrently. Keep each edit + read-back atomic
+  // relative to other built-in calls so a second edit cannot contaminate its evidence.
+  let queue: Promise<unknown> = Promise.resolve();
+  const sequential = <T>(work: () => Promise<T>): Promise<T> => {
+    const next = queue.then(work);
+    queue = next.catch(() => {});
+    return next;
+  };
 
   for (const meta of KITCHENSINK_WORD_TOOLS_META) {
     tools[meta.name] = tool({
@@ -1747,7 +1761,7 @@ export function makeKitchenSinkWordTools(
         required: ['op'],
         additionalProperties: false,
       }),
-      execute: async ({ op, args = {} }, { toolCallId }) => {
+      execute: async ({ op, args = {} }, { toolCallId }) => sequential(async () => {
         const code = buildKs4wScript(meta.name, op, args);
         try {
           if (!settings.autoApprove) {
@@ -1760,12 +1774,44 @@ export function makeKitchenSinkWordTools(
           }
 
           callbacks.onUpsertCodeBlock(toolCallId, { code, status: 'running' });
+          const mutation = isWordMutation(meta.name, op, args);
+          const selectionBefore = getCachedWordSelection();
+          let before: WordObservation | undefined;
+          if (mutation) {
+            try { before = await observeWordDocument(sandbox, settings.executionTimeout); }
+            catch { /* Still read after the action, but do not certify it without a baseline. */ }
+          }
           const result = await sandbox.execute(code, settings.executionTimeout);
 
           if (result.success) {
             const outputText = typeof result.output === 'string'
               ? result.output
               : JSON.stringify(result.output, null, 2);
+            if (mutation) {
+              callbacks.onUpsertCodeBlock(toolCallId, {
+                code, status: 'running', verification: { status: 'checking', detail: 'Reading the document back after the operation.' },
+              });
+              let verification: WordVerification;
+              let readBack = '';
+              try {
+                const after = await observeWordDocument(sandbox, settings.executionTimeout);
+                readBack = wordReadBackForModel(after);
+                verification = before
+                  ? verifyWordMutation(meta.name, op, args, before, after, selectionBefore)
+                  : { status: 'unverified', detail: 'Read-back succeeded, but the pre-edit document could not be observed.' };
+              } catch (error) {
+                verification = { status: 'unverified', detail: `The operation ran, but document read-back failed: ${error instanceof Error ? error.message : String(error)}` };
+              }
+              const evidence = JSON.stringify({ operationOutput: outputText, verification, readBack,
+                instruction: verification.status === 'passed'
+                  ? 'These measured postconditions passed. Compare the observed result against the user request before reporting completion; this is not proof of every aspect of the request.'
+                  : 'Do not claim verified completion. The operation may already have modified the document. Explain the uncertainty or mismatch, inspect the current document, and do not blindly repeat the operation.' });
+              callbacks.onUpsertCodeBlock(toolCallId, {
+                code, status: verification.status === 'failed' ? 'error' : 'success',
+                result: evidence, verification,
+              });
+              return evidence;
+            }
             callbacks.onUpsertCodeBlock(toolCallId, {
               code,
               status: 'success',
@@ -1782,7 +1828,7 @@ export function makeKitchenSinkWordTools(
           callbacks.onMessage({ role: 'assistant', content: '', error: formatted });
           return `Tool failed: ${formatted.title}. ${formatted.detail}`;
         }
-      },
+      }),
     });
   }
 

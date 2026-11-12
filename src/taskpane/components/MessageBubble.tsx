@@ -59,6 +59,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
           code={message.codeBlock.code}
           status={message.codeBlock.status}
           result={message.codeBlock.result}
+          verification={message.codeBlock.verification}
         />
       </div>
     );
