@@ -1,5 +1,7 @@
 node_modules
 dist
+*.exe
+releases/
 installer/files
 installer/AutoOffice-Setup.exe
 installer/output

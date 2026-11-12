@@ -1,31 +1,25 @@
 # 🚀 AutoOffice — Trợ lý AI thông minh cho Microsoft Word, Excel & PowerPoint
 
-**AutoOffice** là tiện ích (Add-in) tích hợp trực tiếp vào thanh công cụ của **Microsoft Word, Excel và PowerPoint**, trang bị **Bộ 10 Công cụ MCP chuyên sâu (52 tác vụ)** giúp soạn thảo văn bản hành chính Việt Nam chuẩn Nghị định 30/2020/NĐ-CP, nhận diện trực tiếp vùng văn bản đang bôi chọn/in đậm/tô màu, và chạy đa luồng độc lập trên từng cửa sổ tài liệu.
+**AutoOffice** là tiện ích (Add-in) tích hợp trực tiếp vào thanh công cụ của **Microsoft Word, Excel và PowerPoint**, trang bị **Bộ 10 nhóm công cụ chuyên sâu (52 tác vụ)** giúp soạn thảo văn bản hành chính Việt Nam chuẩn Nghị định 30/2020/NĐ-CP, nhận diện trực tiếp vùng văn bản đang bôi chọn/in đậm/tô màu, và chạy đa luồng độc lập trên từng cửa sổ tài liệu.
 
 ---
 
-## 📥 Tải về bộ cài đặt nhanh (Dành cho người dùng Word)
+## 📥 Hướng dẫn cài đặt nhanh (An toàn & Minh bạch 100%)
 
-Bạn **không cần cài đặt Node.js, không cần tải mã nguồn và không cần gõ lệnh**. Chỉ cần tải file cài đặt `.exe` (20 KB) dưới đây:
+Bạn **không cần cài đặt Node.js**, không cần chạy dev server. Bạn chỉ cần tải dự án và chạy script cài đặt chính thức của Microsoft Office:
 
-👉 **[⬇️ TẢI NGAY: AutoOffice-Setup.exe (GitHub Release v1.1.0)](https://github.com/anhkkk5/AutoOffice/releases/latest/download/AutoOffice-Setup.exe)**  
-*(Link dự phòng trực tiếp: [Tải AutoOffice-Setup.exe](https://github.com/anhkkk5/AutoOffice/raw/master/releases/AutoOffice-Setup.exe))*
+### Cách 1: Chạy file `install.ps1` bằng PowerShell (Khuyên dùng)
+1. Tải toàn bộ mã nguồn dự án về máy (bấm nút xanh **Code** -> **Download ZIP** trên GitHub, rồi giải nén ra).
+2. Nhấp chuột phải vào file **`install.ps1`** -> Chọn **Run with PowerShell** (Chạy bằng PowerShell).
+3. Nếu hệ thống hỏi quyền Administrator (UAC), bấm **Yes**.
+4. Script sẽ tự động thiết lập thư mục cài đặt `C:\AutoOfficeAddin` và đăng ký Trusted Catalog an toàn vào Microsoft Office.
 
----
-
-## 🛠️ Hướng dẫn cài đặt vào Microsoft Word (Chỉ mất 30 giây)
-
-### Bước 1: Chạy bộ cài `AutoOffice-Setup.exe`
-1. Nhấp đúp vào file **`AutoOffice-Setup.exe`** vừa tải về.
-2. Nếu Windows hỏi quyền quản trị (UAC), bấm **Yes** (hoặc *More info -> Run anyway* nếu SmartScreen hỏi).
-3. Trong cửa sổ hiện ra, bấm nút màu xanh **"Cài đặt AutoOffice"** -> Đợi thông báo **Cài đặt hoàn tất!**.
-
-*(Bộ cài sẽ tự động đóng các cửa sổ Word đang mở, tạo thư mục chia sẻ cục bộ `C:\AutoOfficeAddin` và đăng ký Trusted Catalog vào Microsoft Office).*
+*(Hoặc mở PowerShell với quyền Administrator tại thư mục và gõ: `.\install.ps1`)*
 
 ---
 
 ### Bước 2: Kích hoạt AutoOffice lần đầu trong Word
-1. Mở **Microsoft Word** (mở một tài liệu bất kỳ).
+1. Mở **Microsoft Word** (mở một văn bản bất kỳ).
 2. Trên thanh công cụ **Home**, bấm vào nút **Add-ins** -> Chọn **More Add-ins** *(hoặc vào thẻ **Insert -> Get Add-ins / My Add-ins**)*.
 3. Trong hộp thoại **Office Add-ins**:
    - Chọn tab **SHARED FOLDER (Thư mục dùng chung)** ở phía trên.
@@ -50,17 +44,17 @@ Bạn **không cần cài đặt Node.js, không cần tải mã nguồn và kh�
 
 ## ✨ Điểm nổi bật của AutoOffice
 
-1. **Bộ 10 Công cụ MCP chuyên sâu cho Word (52 Actions/Ops)**:
-   - `word_read`: Đọc cấu trúc tài liệu, đoạn văn `[P0]..[Pn]`, nhận diện vùng đang bôi chọn/in đậm/tô màu, đếm từ và dàn ý.
-   - `word_edit`: Soạn văn bản, sửa trực tiếp phần đang bôi chọn (`edit_selection`), sửa theo định dạng in đậm/tô màu (`edit_by_format`), tìm kiếm & thay thế thông minh không phân biệt hoa/thường và khoảng cách (`search_and_replace`), hỗ trợ cả văn bản trong khung **Text Box** trang bìa.
-   - `word_format`: Chuẩn hóa văn bản hành chính Việt Nam (`format_administrative_vn` — Times New Roman 13pt, giãn dòng 1.3, căn đều 2 bên), định dạng font, đoạn văn, kiểu chữ và tô sáng.
-   - `word_structure`: Tạo và định dạng bảng biểu (`insert_table`), ngắt trang (`insert_break`), thiết lập khổ giấy A4 & lề chuẩn (`set_page_setup`), Header/Footer.
-   - `word_media`: Chèn hình ảnh Base64, liên kết (Hyperlink) và đánh dấu (Bookmark).
-   - `word_review`: Thêm/xóa nhận xét (Comments) và bật/tắt theo dõi sửa đổi (Track Changes).
-   - `word_references`: Tạo mục lục tự động (TOC), chú thích chân trang (Footnote/Endnote) và trường dữ liệu (Fields).
-   - `word_document`: Quản lý Content Controls, thuộc tính tài liệu và xuất/nhập OOXML.
-   - `word_app`: Kiểm tra môi trường Office.js.
-   - `word_help`: Tra cứu danh mục công cụ và hướng dẫn nhanh.
+1. **Bộ 10 nhóm tính năng thông minh cho Word (52 tác vụ chuyên sâu)**:
+   - **Đọc nội dung & thống kê**: Đọc toàn bộ văn bản, nhận diện vùng đang bôi đen/bôi xanh, chữ in đậm/tô màu, bảng biểu, đếm số từ và dàn ý tiêu đề.
+   - **Soạn thảo & sửa vùng bôi chọn**: Soạn văn bản hành chính đầy đủ Quốc hiệu Tiêu ngữ, sửa trực tiếp phần đang bôi đen/bôi đậm/tô màu, tìm & thay thế thông minh (không phân biệt hoa/thường, tự bắt qua nhiều dòng).
+   - **Chuẩn hóa thể thức hành chính**: Tự động căn chuẩn văn bản hành chính Việt Nam (phông Times New Roman 13pt, giãn dòng 1.3, Quốc hiệu/Tiêu ngữ căn giữa, nội dung căn đều 2 bên).
+   - **Bảng biểu & định dạng trang**: Tạo bảng biểu chuyên nghiệp, danh sách đánh số/gạch đầu dòng, căn lề trang A4 chuẩn Nghị định 30, chèn Header/Footer.
+   - **Trường tự động & liên kết**: Chèn ngày tháng/số trang tự động, siêu liên kết (Hyperlink), ô điền biểu mẫu và hình ảnh minh họa.
+   - **Nhận xét & Theo dõi sửa đổi**: Thêm/xóa/trả lời nhận xét bên lề trang, bật/tắt chế độ theo dõi sửa đổi (Track Changes).
+   - **Mục lục tự động & Chú thích**: Chèn chú thích chân trang (Footnote/Endnote), đánh dấu trang và tạo bảng Mục lục tự động (TOC).
+   - **Điền thông tin biểu mẫu**: Tự động điền hàng loạt chỗ trống "..." hoặc {{...}} trong mẫu đơn, chèn chữ chìm (Watermark).
+   - **Thao tác nhanh**: Chèn tại vị trí con trỏ, cuộn tới đoạn văn, lưu tài liệu và phân tích mức độ dễ đọc.
+   - **Giao diện thuần Việt**: Hoàn toàn ẩn mã lệnh kỹ thuật và JSON, chỉ hiển thị trạng thái tiếng Việt ngắn gọn và trả lời tự nhiên.
 2. **Tự động chuẩn hóa Quốc hiệu & Tiêu ngữ**:
    - Khi yêu cầu tạo đơn từ, biên bản, báo cáo, bản kiểm điểm..., AutoOffice tự động đảm bảo có đầy đủ **CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM** và **Độc lập - Tự do - Hạnh phúc** căn giữa chuẩn thể thức mà không làm rò rỉ gạch chân xuống các dòng dưới.
 3. **Đa luồng độc lập cho từng cửa sổ Word**:
@@ -70,18 +64,13 @@ Bạn **không cần cài đặt Node.js, không cần tải mã nguồn và kh�
 
 ## 💻 Dành cho Lập trình viên (Tự chạy từ mã nguồn)
 
-Nếu bạn muốn tự chạy máy chủ phát triển cục bộ hoặc tự đóng gói lại bộ cài `.exe`:
+Nếu bạn muốn tự chạy máy chủ phát triển cục bộ:
 
-### Yêu cầu:
-- **Node.js >= 22** (Khuyên dùng bản LTS tại [nodejs.org](https://nodejs.org/))
-- **Microsoft Office** (Word / Excel / PowerPoint trên Windows)
-
-### Các lệnh chính:
 ```powershell
 # 1. Cài đặt thư viện
 npm install
 
-# 2. Cài chứng chỉ HTTPS cục bộ (chỉ cần chạy 1 lần đầu, chọn Yes khi được hỏi)
+# 2. Cài chứng chỉ HTTPS cục bộ (chọn Yes khi được hỏi)
 npm run certs
 
 # 3. Chạy server dev và tự động mở Word kèm Add-in
@@ -92,15 +81,4 @@ npm run dev
 
 # 5. Đóng gói bản dựng giao diện tĩnh (dist/)
 npm run build
-
-# 6. Đóng gói lại file cài đặt installer/output/AutoOffice-Setup.exe
-npm run build:exe
-```
-
----
-
-## 🗑️ Gỡ cài đặt
-Nếu muốn gỡ bỏ Add-in khỏi Word, bạn có thể mở lại file `AutoOffice-Setup.exe` và bấm nút **"Gỡ cài đặt"**, hoặc chạy lệnh:
-```powershell
-AutoOffice-Setup.exe /UNINSTALL /S
 ```
