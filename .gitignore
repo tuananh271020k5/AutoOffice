@@ -9,3 +9,4 @@ installer/output
 .env
 .env.local
 .env.*.local
+.autooffice-test/

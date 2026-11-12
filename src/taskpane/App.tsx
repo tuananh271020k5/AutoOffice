@@ -64,6 +64,7 @@ export function App({ host }: AppProps) {
   const [docIdentity, setDocIdentity] = useState(() => getDocumentIdentity());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [testBridgeState, setTestBridgeState] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showToolsCatalog, setShowToolsCatalog] = useState(false);
@@ -79,6 +80,7 @@ export function App({ host }: AppProps) {
   const sandboxRef = useRef<Sandbox | null>(null);
   const approvalResolveRef = useRef<((approved: boolean) => void) | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const turnRunningRef = useRef(false);
 
   // Hydrate ONLY the conversation belonging to THIS specific window/document session.
   // Opening a new Word window or a different document starts a fresh, isolated chat
@@ -232,7 +234,8 @@ export function App({ host }: AppProps) {
   }, [activeConversationId, cancelPendingSave, refreshSummaries]);
 
   const handleSend = useCallback(async (text: string) => {
-    if (!text.trim() || isLoading) return;
+    if (!text.trim() || isLoading || turnRunningRef.current) return;
+    turnRunningRef.current = true;
 
     const currentIdentity = getDocumentIdentity();
     setDocIdentity(currentIdentity);
@@ -253,9 +256,15 @@ export function App({ host }: AppProps) {
     setIsLoading(true);
 
     let turnCost: CallCost | null = null;
+    const historyStartLength = conversationHistory.current.length;
+    const turnErrors: unknown[] = [];
+    const toolResults: unknown[] = [];
 
     const callbacks: OrchestratorCallbacks = {
-      onMessage: (msg) => setMessages(prev => [...prev, msg]),
+      onMessage: (msg) => {
+        if (msg.error) turnErrors.push(msg.error);
+        setMessages(prev => [...prev, msg]);
+      },
       onTurnCost: (cost) => { turnCost = cost; },
       onStreamToken: (token) => {
         setMessages(prev => {
@@ -268,6 +277,9 @@ export function App({ host }: AppProps) {
         });
       },
       onUpsertCodeBlock: (toolCallId, patch) => {
+        if (patch.status === 'success' || patch.status === 'error' || patch.status === 'rejected') {
+          toolResults.push({ toolCallId, status: patch.status, result: patch.result });
+        }
         setMessages(prev => {
           const idx = prev.findIndex(m => m.codeBlock?.toolCallId === toolCallId);
           if (idx === -1) {
@@ -313,8 +325,10 @@ export function App({ host }: AppProps) {
       conversationHistory.current = history;
     } catch (e) {
       const formatted = formatError(e, { phase: 'agent' });
+      turnErrors.push(formatted);
       setMessages(prev => [...prev, { role: 'assistant', content: '', error: formatted }]);
     } finally {
+      turnRunningRef.current = false;
       setIsLoading(false);
       setPendingApproval(null);
     }
@@ -357,7 +371,41 @@ export function App({ host }: AppProps) {
         refreshSummaries();
       });
     }
+    return { modelMessages: conversationHistory.current.slice(historyStartLength), errors: turnErrors, toolResults };
   }, [isLoading, settings, host, activeConversationId, activeChatHost, activeCost, persistDebounced, persistImmediate, refreshSummaries]);
+
+  // One connection per task pane. Access current React callbacks without reconnecting mid-turn.
+  const testAccessRef = useRef({
+    busy: () => turnRunningRef.current,
+    status: () => ({
+      provider: settings.selectedProviderId, model: settings.selectedModel,
+      hasApiKey: hasActiveProviderApiKey(settings), autoApprove: settings.autoApprove,
+      busy: turnRunningRef.current, pendingApproval: Boolean(pendingApproval),
+    }),
+    send: handleSend,
+  });
+  testAccessRef.current = {
+    busy: () => turnRunningRef.current,
+    status: () => ({
+      provider: settings.selectedProviderId, model: settings.selectedModel,
+      hasApiKey: hasActiveProviderApiKey(settings), autoApprove: settings.autoApprove,
+      busy: turnRunningRef.current, pendingApproval: Boolean(pendingApproval),
+    }),
+    send: handleSend,
+  };
+  useEffect(() => {
+    if (!import.meta.env.DEV || !__AUTOOFFICE_TEST_BRIDGE__ || host.kind !== 'word') return;
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    void import('./testing/bridge.ts').then(({ startTestBridge }) => {
+      if (!disposed) stop = startTestBridge({
+        busy: () => testAccessRef.current.busy(),
+        status: () => testAccessRef.current.status(),
+        send: prompt => testAccessRef.current.send(prompt),
+      }, setTestBridgeState);
+    });
+    return () => { disposed = true; stop?.(); };
+  }, [host.kind]);
 
   if (showSettings) {
     return (
@@ -428,6 +476,11 @@ export function App({ host }: AppProps) {
         draftPrompt={draftPrompt}
         onClearDraftPrompt={() => setDraftPrompt('')}
       />
+      {import.meta.env.DEV && __AUTOOFFICE_TEST_BRIDGE__ && testBridgeState && (
+        <div role="status" style={{ padding: '4px 10px', fontSize: 11, background: '#fff4ce' }}>
+          {testBridgeState}
+        </div>
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import https from 'https';
 import http from 'http';
+import { localTestBridgePlugin } from './tools/test-bridge-plugin';
 
 // Try to load dev certs for HTTPS (required for Office sideloading)
 function getHttpsConfig() {
@@ -20,6 +21,7 @@ function getHttpsConfig() {
 export default defineConfig({
   base: process.env.VITE_BASE || '/',
   plugins: [
+    localTestBridgePlugin(),
     react(),
     viteStaticCopy({
       targets: [
