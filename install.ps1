@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Cài đặt AutoOffice Add-in cho Microsoft Word, Excel và PowerPoint thông qua Trusted Catalog.
 .DESCRIPTION
